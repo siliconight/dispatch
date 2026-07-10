@@ -1,0 +1,58 @@
+{
+  "schema": "dispatch.mission.v0.1",
+  "mission_id": "gas_station_robbery_001",
+  "title": "Gas Station Robbery",
+  "engine": "godot_4_7",
+  "mode": "online_coop_pve",
+  "players": {
+    "min": 1,
+    "max": 4,
+    "preferred": 4
+  },
+  "networking": {
+    "model": "server_authoritative",
+    "critical_state_owner": "server"
+  },
+  "theme": "delco_1997_gas_station",
+  "inputs": {
+    "deli_counter": "build/deli_counter/shell.gameplay.json",
+    "lot": "build/lot/lot.layout.json",
+    "zoo": "build/zoo/zoo.catalog.json",
+    "patina": "build/patina/shell.patina.json",
+    "lux": "build/lux/lux.profile.json"
+  },
+  "mission_flow": [
+    {
+      "step": "spawn",
+      "location_tag": "street_start"
+    },
+    {
+      "step": "approach",
+      "objective": "reach_gas_station"
+    },
+    {
+      "step": "civilian_mode",
+      "objective": "enter_store"
+    },
+    {
+      "step": "dangerous_mode",
+      "trigger": "weapon_fired_or_alarm_started"
+    },
+    {
+      "step": "loot",
+      "objective": "open_cash_register"
+    },
+    {
+      "step": "escape",
+      "objective": "reach_escape_vehicle"
+    }
+  ],
+  "validation": {
+    "require_online_runtime_readiness": true,
+    "require_all_objectives_reachable": true,
+    "require_all_players_spawn_valid": true,
+    "require_ai_navmesh": true,
+    "require_cover_score": false,
+    "require_performance_budget": true
+  }
+}

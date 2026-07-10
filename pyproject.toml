@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dispatch-missions"
+version = "0.1.0"
+description = "Online mission assembly and validation for Godot 4.7 (DELCO pipeline)"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[project.scripts]
+dispatch = "dispatch.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["dispatch*"]
+
+[tool.setuptools.package-data]
+dispatch = ["gd/*.tpl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

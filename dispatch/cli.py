@@ -1,0 +1,189 @@
+"""Dispatch CLI (TDD 18).
+
+    dispatch init <mission_id>
+    dispatch assemble <spec.json>
+    dispatch validate <spec.json>
+    dispatch export <spec.json> --target godot
+    dispatch overlays <spec.json>
+    dispatch build <spec.json>       # resolve -> assemble -> validate -> export -> report
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from . import DispatchError, __version__
+from .assembler import assemble_scene, build_context, default_out_dir, export_package
+from .overlays import write_overlays
+from .report import write_reports
+from .score import compute
+from .spec import SCHEMA_MISSION, load_spec
+from .validators import run_all
+
+INIT_SPEC = {
+    "schema": SCHEMA_MISSION,
+    "mission_id": "",
+    "title": "",
+    "engine": "godot_4_7",
+    "mode": "online_coop_pve",
+    "players": {"min": 1, "max": 4, "preferred": 4},
+    "networking": {"model": "server_authoritative", "critical_state_owner": "server"},
+    "theme": "",
+    "inputs": {
+        "deli_counter": "build/deli_counter/shell.gameplay.json",
+        "lot": "build/lot/lot.layout.json",
+        "zoo": "build/zoo/zoo.catalog.json",
+        "patina": "build/patina/shell.patina.json",
+        "lux": "build/lux/lux.profile.json",
+    },
+    "mission_flow": [
+        {"step": "spawn", "location_tag": "mission_start"},
+        {"step": "approach", "objective": "reach_site"},
+        {"step": "loot", "objective": "grab_the_take"},
+        {"step": "escape", "objective": "reach_extraction"},
+    ],
+    "validation": {
+        "require_online_runtime_readiness": True,
+        "require_all_objectives_reachable": True,
+        "require_all_players_spawn_valid": True,
+        "require_ai_navmesh": True,
+        "require_performance_budget": True,
+    },
+}
+
+
+def _out_dir(spec, args) -> Path:
+    return Path(args.out).resolve() if args.out else default_out_dir(spec)
+
+
+def cmd_init(args) -> int:
+    mission_id = args.mission_id
+    root = Path(args.out or mission_id)
+    if (root / "dispatch.mission.json").exists():
+        print(f"refusing to overwrite existing spec in {root}", file=sys.stderr)
+        return 2
+    root.mkdir(parents=True, exist_ok=True)
+    spec = dict(INIT_SPEC)
+    spec["mission_id"] = mission_id
+    spec["title"] = mission_id.replace("_", " ").title()
+    (root / "dispatch.mission.json").write_text(
+        json.dumps(spec, indent=2) + "\n", encoding="utf-8")
+    for tool in ("deli_counter", "lot", "zoo", "patina", "lux"):
+        (root / "build" / tool).mkdir(parents=True, exist_ok=True)
+    print(f"initialized {root / 'dispatch.mission.json'}")
+    print("point inputs at your Deli Counter / Lot / Zoo / Patina / Lux exports, then run:")
+    print(f"  dispatch build {root / 'dispatch.mission.json'}")
+    return 0
+
+
+def cmd_assemble(args) -> int:
+    spec = load_spec(args.spec)
+    ctx = build_context(spec)
+    scene = assemble_scene(ctx)
+    out = _out_dir(spec, args)
+    export_package(ctx, scene, out)
+    print(f"assembled {out / 'mission.tscn'}")
+    return 0
+
+
+def cmd_validate(args) -> int:
+    spec = load_spec(args.spec)
+    ctx = build_context(spec)
+    assemble_scene(ctx)  # structural pass; scene not written
+    issues = run_all(ctx)
+    score = compute(issues)
+    out = _out_dir(spec, args)
+    vdir = write_reports(ctx, issues, score, out)
+    _print_summary(issues, score, vdir)
+    return 1 if any(i.severity == "blocker" for i in issues) else 0
+
+
+def cmd_overlays(args) -> int:
+    spec = load_spec(args.spec)
+    ctx = build_context(spec)
+    out = _out_dir(spec, args)
+    written = write_overlays(ctx, out)
+    for p in written:
+        print(f"wrote {p}")
+    return 0
+
+
+def cmd_export(args) -> int:
+    if args.target != "godot":
+        print(f"unsupported export target {args.target!r}; only godot is supported", file=sys.stderr)
+        return 2
+    return cmd_assemble(args)
+
+
+def cmd_build(args) -> int:
+    spec = load_spec(args.spec)
+    ctx = build_context(spec)
+    scene = assemble_scene(ctx)
+    out = _out_dir(spec, args)
+    export_package(ctx, scene, out)
+    issues = run_all(ctx)
+    score = compute(issues)
+    vdir = write_reports(ctx, issues, score, out)
+    write_overlays(ctx, out)
+    print(f"exported {out}")
+    _print_summary(issues, score, vdir)
+    return 1 if any(i.severity == "blocker" for i in issues) else 0
+
+
+def _print_summary(issues, score, vdir) -> None:
+    counts = {}
+    for i in issues:
+        counts[i.severity] = counts.get(i.severity, 0) + 1
+    parts = ", ".join(f"{counts.get(s, 0)} {s}" for s in ("blocker", "major", "moderate", "minor"))
+    print(f"readiness {score['mission_readiness']} ({score['status']}) — {parts}")
+    print(f"report: {vdir / 'report.md'}")
+    for i in issues:
+        if i.severity == "blocker":
+            print(f"  BLOCKER [{i.system}] {i.message}")
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="dispatch",
+        description="Assemble the mission. Validate the mission. Package the mission for online play.",
+    )
+    parser.add_argument("--version", action="version", version=f"dispatch {__version__}")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("init", help="scaffold a mission spec and build folders")
+    p.add_argument("mission_id")
+    p.add_argument("--out", help="directory to create (default: ./<mission_id>)")
+    p.set_defaults(fn=cmd_init)
+
+    for name, fn, hlp in (
+        ("assemble", cmd_assemble, "resolve inputs and write the Godot mission package (no validation)"),
+        ("validate", cmd_validate, "run validation and write reports"),
+        ("overlays", cmd_overlays, "write debug overlay PNGs"),
+        ("build", cmd_build, "resolve -> assemble -> validate -> export -> report"),
+    ):
+        p = sub.add_parser(name, help=hlp)
+        p.add_argument("spec", help="path to dispatch.mission.json")
+        p.add_argument("--out", help="output directory (default: <spec dir>/export/godot/missions/<mission_id>)")
+        p.set_defaults(fn=fn)
+
+    p = sub.add_parser("export", help="export the mission package for a target engine")
+    p.add_argument("spec")
+    p.add_argument("--target", default="godot")
+    p.add_argument("--out")
+    p.set_defaults(fn=cmd_export)
+
+    args = parser.parse_args(argv)
+    try:
+        return args.fn(args)
+    except DispatchError as e:
+        print(e.render(), file=sys.stderr)
+        return 2
+    except BrokenPipeError:
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
