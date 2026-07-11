@@ -50,6 +50,7 @@ def main(target: Path = None) -> None:
     w("build/deli_counter/shell.glb", glb)
     w("build/deli_counter/shell.gameplay.json", {
         "schema": "dc.gameplay.v1",
+        "license": {"name": "proprietary-siliconight", "source": "deli_counter"},
         "up_axis": "z",
         "anchors": [
             {"id": "store_door", "type": "objective", "pos": [0, -1, 0],
@@ -90,6 +91,7 @@ def main(target: Path = None) -> None:
     w("build/lot/lot.glb", glb)
     w("build/lot/lot.layout.json", {
         "schema": "lot.layout.v1",
+        "license": {"name": "proprietary-siliconight", "source": "lot"},
         "up_axis": "z",
         "site": "delco_corner_lot",
         "bounds": [[-14, -22, 0], [14, 12, 8]],
@@ -139,6 +141,7 @@ def main(target: Path = None) -> None:
     # --- Zoo: prop catalog ----------------------------------------------------
     w("build/zoo/zoo.catalog.json", {
         "schema": "zoo.catalog.v1",
+        "license": {"name": "proprietary-siliconight", "source": "zoo"},
         "assets": [
             {"asset_id": "dumpster_01", "category": "cover",
              "theme_tags": ["urban", "delco", "gas_station", "1990s"],
@@ -161,6 +164,7 @@ def main(target: Path = None) -> None:
     w("build/patina/shell.patina.glb", glb)
     w("build/patina/shell.patina.json", {
         "schema": "patina.shell.v1",
+        "license": {"name": "proprietary-siliconight", "source": "patina"},
         "materials": [f"mat_{i:02d}" for i in range(14)],
     })
     (base / "build/patina/textures").mkdir(parents=True, exist_ok=True)
@@ -170,6 +174,7 @@ def main(target: Path = None) -> None:
     # --- Lux: lighting profile ---------------------------------------------------
     w("build/lux/lux.profile.json", {
         "schema": "lux.profile.v1",
+        "license": {"name": "proprietary-siliconight", "source": "lux"},
         "preset": "gas_station_fluorescent",
         "time_of_day": "night",
     })
@@ -182,7 +187,7 @@ def main(target: Path = None) -> None:
 
     # --- Mission spec (TDD section 9) ------------------------------------------
     w("dispatch.mission.json", {
-        "schema": "dispatch.mission.v0.1",
+        "schema": "dispatch.mission.v0.2",
         "mission_id": "gas_station_robbery_001",
         "title": "Gas Station Robbery",
         "engine": "godot_4_7",

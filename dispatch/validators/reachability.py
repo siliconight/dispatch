@@ -7,7 +7,7 @@ node within anchor_nav_radius; reachability is then graph connectivity.
 from __future__ import annotations
 
 from ..anchors import by_type
-from ..authority import node_path_for
+from ..ownership import node_path_for
 from . import Issue
 
 SYSTEM = "objective_reachability"
@@ -44,13 +44,13 @@ def validate(ctx) -> list:
         else:
             bound[a.id] = node
 
-    # Flow-ordered reachability: every start reaches the first bound step
-    # anchor; each consecutive pair of flow steps is connected.
+    # Beat-ordered reachability: every start reaches the first bound beat's
+    # anchors; each consecutive pair of proposed beats is connected.
     flow_anchors = []
-    for step in ctx.flow.steps:
-        ids = [aid for aid in step.anchor_ids if aid in bound]
+    for beat in ctx.beats.beats:
+        ids = [aid for aid in beat.anchor_ids if aid in bound]
         if ids:
-            flow_anchors.append((step.name, ids))
+            flow_anchors.append((beat.id, ids))
 
     if flow_anchors:
         first_name, first_ids = flow_anchors[0]
@@ -69,7 +69,7 @@ def validate(ctx) -> list:
             if not ok:
                 issues.append(Issue(
                     "blocker", SYSTEM,
-                    f"Mission beat {name_b!r} cannot be reached from beat {name_a!r}.",
+                    f"Proposed beat {name_b!r} cannot be reached from beat {name_a!r}.",
                     "Move the anchor to a reachable nav island or add a nav link.",
                 ))
 
@@ -86,5 +86,5 @@ def validate(ctx) -> list:
             ))
 
     if not issues:
-        issues.append(Issue("info", SYSTEM, "All mission beats are reachable in flow order."))
+        issues.append(Issue("info", SYSTEM, "All proposed beats are reachable in graph order."))
     return issues

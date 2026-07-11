@@ -122,27 +122,47 @@ def resolve_inputs(spec: MissionSpec) -> ResolvedInputs:
     return out
 
 
-def write_lock_file(spec: MissionSpec, resolved: ResolvedInputs, out_dir: Path) -> Path:
-    """Record upstream versions and hashes (TDD 21)."""
-    lock = {
-        "schema": "dispatch.lock.v0.1",
-        "dispatch_version": __version__,
-        "mission_id": spec.mission_id,
-        "engine": spec.engine,
-        "inputs": {},
-    }
+def write_lock_file(spec: MissionSpec, resolved: ResolvedInputs, out_dir: Path,
+                    mode: str = "shell-handoff") -> Path:
+    """dispatch.build_lock.v0.2 (delta D8): what Dispatch consumed and
+    produced — spec hash, per-role input hashes, per-file output hashes,
+    contract, mode, timestamp. Level Factory wraps this in its own lock.
+    Written LAST: it hashes every package file except itself.
+    """
+    from datetime import datetime, timezone
+
+    from . import SCHEMA_MISSION
+
+    inputs = [{"role": "mission_spec", "path": str(spec.spec_path),
+               "sha256": _sha256(spec.spec_path)}]
     for tool, rt in sorted(resolved.tools.items()):
-        entries = {}
         for name, path in sorted(rt.files.items()):
             if path.is_dir():
-                entries[name] = {"dir": True}
-            else:
-                entries[name] = {"sha256": _sha256(path), "bytes": path.stat().st_size}
-        lock["inputs"][tool] = {
-            "root": str(rt.root),
-            "schema": rt.schema,
-            "files": entries,
-        }
+                continue
+            inputs.append({"role": f"{tool}:{name}", "path": str(path),
+                           "sha256": _sha256(path)})
+
+    outputs = []
+    for f in sorted(out_dir.rglob("*")):
+        if not f.is_file():
+            continue
+        rel = f.relative_to(out_dir).as_posix()
+        if rel == "build.lock.json":
+            continue
+        outputs.append({"path": rel, "sha256": _sha256(f)})
+
+    lock = {
+        "schema": "dispatch.build_lock.v0.2",
+        "dispatch_version": __version__,
+        "contract": SCHEMA_MISSION,
+        "mode": mode,
+        "mission_id": spec.mission_id,
+        "engine": spec.engine,
+        "spec_sha256": _sha256(spec.spec_path),
+        "inputs": inputs,
+        "outputs": outputs,
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
     out_dir.mkdir(parents=True, exist_ok=True)
     p = out_dir / "build.lock.json"
     p.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")

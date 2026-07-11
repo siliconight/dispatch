@@ -5,7 +5,7 @@ from dispatch.validators import Issue
 def test_clean_is_100():
     s = compute([Issue("info", "assembly", "ok")])
     assert s["mission_readiness"] == 100
-    assert s["status"] == "ready_for_review"
+    assert s["status"] == "ready_for_handoff"
 
 
 def test_blocker_caps_below_playtest():
@@ -15,12 +15,12 @@ def test_blocker_caps_below_playtest():
 
 
 def test_majors_degrade():
-    issues = [Issue("major", "online_runtime", "x"),
+    issues = [Issue("major", "integration_readiness", "x"),
               Issue("major", "objective_reachability", "y")]
     s = compute(issues)
-    assert s["scores"]["online_runtime"] == 75
+    assert s["scores"]["integration_readiness"] == 75
     assert s["scores"]["objective_flow"] == 75
-    assert s["status"] == "ready_for_playtest"
+    assert s["status"] == "handoff_with_issues"
 
 
 def test_category_floor_zero():

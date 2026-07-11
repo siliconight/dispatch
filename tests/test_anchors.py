@@ -1,5 +1,5 @@
-from dispatch.anchors import (assign_net_ids, blender_to_godot,
-                              find_duplicate_ids, normalize_anchors)
+from dispatch.anchors import (blender_to_godot, find_duplicate_ids,
+                              normalize_anchors, runtime_requirements_for)
 
 
 def test_blender_to_godot():
@@ -17,22 +17,24 @@ def test_normalize_y_up_passthrough():
     assert a.pos == (1, 2, 3)
 
 
-def test_net_ids_stable_and_server_only():
-    recs = [
-        {"id": "b_obj", "type": "objective", "pos": [0, 0, 0]},
-        {"id": "a_obj", "type": "objective", "pos": [0, 0, 0]},
-        {"id": "spawn", "type": "player_start", "pos": [0, 0, 0]},
-    ]
-    a1 = normalize_anchors(recs, "dc")
-    a2 = normalize_anchors(list(reversed(recs)), "dc")
-    assign_net_ids(a1)
-    assign_net_ids(a2)
-    ids1 = {a.id: a.net_id for a in a1}
-    ids2 = {a.id: a.net_id for a in a2}
-    assert ids1 == ids2                      # input order does not matter
-    assert ids1["a_obj"] == 1000
-    assert ids1["b_obj"] == 1001
-    assert ids1["spawn"] == 0                # not replicated
+def test_shell_id_and_adapter():
+    a = normalize_anchors([{"id": "vault_door_01", "type": "door", "pos": [0, 0, 0]}], "dc")[0]
+    assert a.shell_id == "vault_door_01"
+    assert a.expected_adapter == "openable_door"
+    assert a.integration_status == "unimplemented"
+
+
+def test_runtime_requirements_declarations():
+    recs = normalize_anchors([
+        {"id": "d", "type": "door", "pos": [0, 0, 0]},
+        {"id": "o", "type": "objective", "pos": [0, 0, 0]},
+        {"id": "s", "type": "player_start", "pos": [0, 0, 0]},
+    ], "dc")
+    door, obj, start = recs
+    assert runtime_requirements_for(door)["replication_required"] is True
+    assert runtime_requirements_for(door)["mission_persistence_required"] is False
+    assert runtime_requirements_for(obj)["mission_persistence_required"] is True
+    assert runtime_requirements_for(start) == {}
 
 
 def test_duplicates():

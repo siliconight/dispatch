@@ -95,17 +95,23 @@ class NavGraph:
         zs = [n.pos[2] for n in self.nodes.values()]
         return ((min(xs), min(zs)), (max(xs), max(zs)))
 
-    def to_json(self) -> dict:
+    def to_json(self, bridge_radius: float = 0.0) -> dict:
+        bridged = {tuple(sorted(b)) for b in self.bridges}
+        edges = []
+        for pair in sorted({tuple(sorted([a, b]))
+                            for a in self.adj for b in self.adj[a] if a != b}):
+            e = {"nodes": list(pair), "bridged": pair in bridged}
+            if e["bridged"] and bridge_radius:
+                e["bridge_radius"] = bridge_radius
+            edges.append(e)
         return {
-            "schema": "dispatch.navgraph.v0.1",
+            "schema": "dispatch.navigation_hints.v0.2",
+            "navmesh": "bake_required",
             "nodes": [
                 {"id": n.id, "pos": list(n.pos), "source": n.source}
                 for n in sorted(self.nodes.values(), key=lambda n: n.id)
             ],
-            "links": sorted(
-                [sorted([a, b]) for a in self.adj for b in self.adj[a] if a < b]
-            ),
-            "bridges": sorted(self.bridges),
+            "edges": edges,
         }
 
 

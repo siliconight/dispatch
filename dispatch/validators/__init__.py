@@ -35,12 +35,12 @@ def issues_by_severity(issues: list) -> dict:
     return out
 
 
-from . import assembly, nav, online_runtime, performance, reachability, spawns  # noqa: E402
+from . import assembly, integration, nav, performance, reachability, spawns  # noqa: E402
 
 # (system name, validator function, gate flag in spec.validation or None)
 VALIDATORS = (
     ("assembly", assembly.validate, None),
-    ("online_runtime", online_runtime.validate, "require_online_runtime_readiness"),
+    ("integration_readiness", integration.validate, "require_online_runtime_readiness"),
     ("multiplayer_spawns", spawns.validate, "require_all_players_spawn_valid"),
     ("objective_reachability", reachability.validate, "require_all_objectives_reachable"),
     ("ai_nav", nav.validate, "require_ai_navmesh"),

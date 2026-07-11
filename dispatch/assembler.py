@@ -1,9 +1,14 @@
-"""Scene Assembler (TDD 13.2) and mission package export (TDD 10).
+"""Scene Assembler and mission shell package export.
 
-build_context() runs resolve -> import -> normalize (anchors, nav, flow,
-authority) and returns everything validators and exporters need.
-assemble_scene() builds the predictable MissionRoot hierarchy (TDD 11).
-export_package() writes the mission folder.
+build_context() runs resolve -> import -> normalize (anchors, nav, beat
+graph, ownership declarations). assemble_scene() builds the handoff scene
+(handoff spec section 9): Functional / Presentation / Handoff, plus
+PreviewOnly when preview mode is requested. export_package() writes the
+package (section 10).
+
+Dispatch prepares a mission shell for gameplay and server engineering. It
+implements no mission authority, RPCs, replication, persistence, late-join
+recovery, or objective/combat/AI behavior.
 """
 
 from __future__ import annotations
@@ -14,22 +19,31 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import GENERATED_MARKER, __version__
-from .anchors import assign_net_ids, find_duplicate_ids
-from .authority import ANCHOR_PARENT, authority_for, build_authority_map, node_path_for
-from .flow import compile_flow
+from .anchors import find_duplicate_ids
+from .flow import compile_beats
 from .importers import IMPORTERS
 from .navgraph import NavGraph, merge
-from .resolver import resolve_inputs, write_lock_file
+from .anchors import required_authority_for
+from .ownership import (ANCHOR_GROUPS, build_anchor_registry,
+                        build_ownership_requirements, layer_for,
+                        node_path_for)
+from .resolver import resolve_inputs
 from .spec import MissionSpec
-from .tscn import Raw, Scene, SceneNode, serialize
+from .tscn import Scene, SceneNode, serialize
 
 GD_DIR = Path(__file__).parent / "gd"
 
-WORLD_GROUPS = ("LotRoot", "BuildingRoot", "PropsRoot", "VisualsRoot",
-                "LightingRoot", "FXRoot", "AudioRoot")
-RUNTIME_NODES = ("MissionController", "ObjectiveController", "SpawnController",
-                 "ExtractionController", "NetworkAuthority", "ReplicationRegistry",
-                 "DebugOverlay")
+# "playtest" and "preview-playtest" are aliases: shell-handoff plus the
+# isolated preview_only/ package (delta D1 resolution — v0.1.0's runtime
+# skeleton is not resurrected; AC7 amended accordingly).
+MODES = ("shell-handoff", "playtest", "preview-playtest", "runtime-adapter")
+DEFAULT_MODE = "shell-handoff"
+PREVIEW_MODES = ("playtest", "preview-playtest")
+
+PREVIEW_HEADER = (
+    "# DISPATCH PREVIEW ONLY\n"
+    "# Not production gameplay or networking code."
+)
 
 
 @dataclass
@@ -37,10 +51,13 @@ class BuildContext:
     spec: MissionSpec
     resolved: object
     imports: dict                      # tool -> ToolImport
+    mode: str = DEFAULT_MODE
+    include_preview: bool = False
     anchors: list = field(default_factory=list)
     nav: NavGraph = None
-    flow: object = None
-    authority: dict = field(default_factory=dict)
+    beats: object = None
+    ownership: dict = field(default_factory=dict)
+    registry: dict = field(default_factory=dict)
     duplicate_anchor_ids: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
 
@@ -50,7 +67,11 @@ class BuildContext:
         return str(godot.get("res_root", f"res://missions/{self.spec.mission_id}")).rstrip("/")
 
 
-def build_context(spec: MissionSpec) -> BuildContext:
+def build_context(spec: MissionSpec, mode: str = DEFAULT_MODE,
+                  include_preview: bool = False) -> BuildContext:
+    if mode not in MODES:
+        raise ValueError(f"unknown build mode {mode!r}; expected one of {MODES}")
+    include_preview = include_preview or mode in PREVIEW_MODES
     resolved = resolve_inputs(spec)
     imports = {}
     for tool in sorted(resolved.tools):
@@ -61,25 +82,38 @@ def build_context(spec: MissionSpec) -> BuildContext:
         if tool in imports:
             anchors.extend(imports[tool].anchors)
     anchors.sort(key=lambda a: (a.type, a.id))
-    assign_net_ids(anchors)
+
+    # runtime-adapter mode ships adapter interfaces, so anchors with a known
+    # expected adapter become adapter_available; Dispatch never sets
+    # integrated / verified_by_game_runtime (handoff spec section 8).
+    if mode == "runtime-adapter":
+        for a in anchors:
+            if a.expected_adapter:
+                a.integration_status = "adapter_available"
 
     graphs = [imports[t].nav for t in ("deli_counter", "lot") if t in imports and imports[t].nav]
     nav = merge(graphs, float(spec.tuning["nav_bridge_radius"])) if graphs else NavGraph()
 
-    flow = compile_flow(spec.mission_flow, anchors)
-    authority = build_authority_map(spec, anchors)
+    beats = compile_beats(spec.mission_flow, anchors, spec.mission_id)
 
     ctx = BuildContext(
         spec=spec,
         resolved=resolved,
         imports=imports,
+        mode=mode,
+        include_preview=include_preview,
         anchors=anchors,
         nav=nav,
-        flow=flow,
-        authority=authority,
+        beats=beats,
         duplicate_anchor_ids=find_duplicate_ids(anchors),
         warnings=list(resolved.warnings),
     )
+    ctx.ownership = build_ownership_requirements(spec, anchors)
+    ctx.registry = build_anchor_registry(spec, anchors)
+    if spec.legacy_schema:
+        ctx.warnings.append(
+            "spec uses schema dispatch.mission.v0.1; read for compatibility — "
+            "new specs should declare dispatch.mission.v0.2.")
     return ctx
 
 
@@ -103,77 +137,51 @@ def assemble_scene(ctx: BuildContext) -> Scene:
         "dispatch_generated": True,
         "dispatch_marker": GENERATED_MARKER,
         "dispatch_version": __version__,
+        "dispatch_mode": ctx.mode,
         "mission_id": spec.mission_id,
         "mission_title": spec.title,
     }
     scene.add(root)
 
-    # -- World ---------------------------------------------------------------
-    scene.add(SceneNode(name="World", parent="."))
-    for group in WORLD_GROUPS:
-        scene.add(SceneNode(name=group, parent="World",
+    # -- Functional ------------------------------------------------------------
+    scene.add(SceneNode(name="Functional", parent="."))
+    for group in ("Geometry", "Collision", "GameplayAnchors", "NavigationHints"):
+        scene.add(SceneNode(name=group, parent="Functional",
                             metadata={"dispatch_generated": True}))
 
     if "lot" in ctx.imports:
         eid = ext("PackedScene", "assets/lot.glb", "lot")
-        scene.add(SceneNode(name="LotSite", parent="World/LotRoot", instance=eid,
+        scene.add(SceneNode(name="LotSite", parent="Functional/Geometry", instance=eid,
                             metadata={"dispatch_generated": True, "source": "lot",
-                                      "role": "function"}))
-
+                                      "layer": "functional"}))
     if "deli_counter" in ctx.imports:
         eid = ext("PackedScene", "assets/shell.glb", "shell")
-        scene.add(SceneNode(name="Shell", parent="World/BuildingRoot", instance=eid,
+        scene.add(SceneNode(name="Shell", parent="Functional/Geometry", instance=eid,
                             metadata={"dispatch_generated": True, "source": "deli_counter",
-                                      "role": "function"}))
+                                      "layer": "functional"}))
+        if "collision" in ctx.imports["deli_counter"].meta:
+            node = SceneNode(name="ShellCollisionInfo", type="Node", parent="Functional/Collision",
+                             metadata={"dispatch_generated": True,
+                                       "collision_manifest": f"{res}/assets/shell.collision.json"})
+            scene.add(node)
 
-    if "patina" in ctx.imports:
-        eid = ext("PackedScene", "assets/shell.patina.glb", "patina")
-        scene.add(SceneNode(name="StyledShell", parent="World/VisualsRoot", instance=eid,
-                            metadata={"dispatch_generated": True, "source": "patina",
-                                      "role": "presentation", "authority": "client"}))
-
-    if "lux" in ctx.imports:
-        lighting = scene.nodes  # LightingRoot already added; attach metadata
-        for n in lighting:
-            if n.name == "LightingRoot":
-                profile = ctx.imports["lux"].meta.get("profile", {})
-                n.metadata.update({
-                    "authority": "client",
-                    "lux_profile": str(profile.get("preset", profile.get("name", ""))),
-                    "lux_profile_file": f"{res}/assets/lux/lux.profile.json",
-                })
-
-    _add_props(ctx, scene, ext)
-
-    # -- Gameplay ------------------------------------------------------------
-    scene.add(SceneNode(name="Gameplay", parent="."))
-    gameplay_groups = ["PlayerStarts", "Objectives", "ExtractionPoints",
-                       "Interactables", "Triggers"]
-    for g in gameplay_groups:
-        scene.add(SceneNode(name=g, parent="Gameplay",
+    for g in ANCHOR_GROUPS:
+        scene.add(SceneNode(name=g, parent="Functional/GameplayAnchors",
                             metadata={"dispatch_generated": True}))
-    scene.add(SceneNode(name="AI", parent="Gameplay"))
-    for g in ("SpawnZones", "PatrolRoutes", "CoverPoints", "DirectorZones"):
-        scene.add(SceneNode(name=g, parent="Gameplay/AI",
-                            metadata={"dispatch_generated": True}))
-    scene.add(SceneNode(name="Navigation", parent="Gameplay"))
-    scene.add(SceneNode(name="NavMesh", type="NavigationRegion3D", parent="Gameplay/Navigation",
-                        metadata={"dispatch_generated": True, "bake_required": True,
-                                  "navgraph_file": f"{res}/nav/navgraph.json"}))
-    scene.add(SceneNode(name="NavRegions", parent="Gameplay/Navigation"))
-    scene.add(SceneNode(name="NavLinks", parent="Gameplay/Navigation"))
-
     for a in ctx.anchors:
         path = node_path_for(a)
         parent, name = path.rsplit("/", 1)
         md = {
             "dispatch_generated": True,
+            "shell_id": a.qualified_id(spec.mission_id),
             "anchor_type": a.type,
             "source": a.source,
-            "authority": authority_for(a),
+            "layer": layer_for(a),
+            "required_authority": required_authority_for(a),
+            "integration_status": a.integration_status,
         }
-        if a.net_id:
-            md["net_id"] = a.net_id
+        if a.expected_adapter:
+            md["expected_adapter"] = a.expected_adapter
         if a.tags:
             md["tags"] = list(a.tags)
         if a.objective:
@@ -181,26 +189,70 @@ def assemble_scene(ctx: BuildContext) -> Scene:
         scene.add(SceneNode(name=name, type="Marker3D", parent=parent,
                             pos=a.pos, rot_y=a.rot_y, metadata=md))
 
-    # -- Runtime ---------------------------------------------------------------
-    scene.add(SceneNode(name="Runtime", parent="."))
-    cfg_id = ext("Resource", "mission_config.tres", "cfg")
-    run_id = ext("Script", "mission_runtime.gd", "runtime")
-    for n in RUNTIME_NODES:
-        node = SceneNode(name=n, type="Node", parent="Runtime",
-                         metadata={"dispatch_generated": True,
-                                   "authority": "client" if n == "DebugOverlay" else "server"})
-        if n == "MissionController":
-            node.script = run_id
-            node.props["mission_config"] = Raw(f'ExtResource("{cfg_id}")')
-        if n == "ReplicationRegistry":
-            node.metadata["registry_file"] = f"{res}/network_authority_map.json"
+    scene.add(SceneNode(name="NavMesh", type="NavigationRegion3D",
+                        parent="Functional/NavigationHints",
+                        metadata={"dispatch_generated": True, "bake_required": True,
+                                  "navigation_hints_file": f"{res}/navigation_hints.json"}))
+
+    # -- Presentation ------------------------------------------------------------
+    scene.add(SceneNode(name="Presentation", parent="."))
+    for group in ("Props", "Materials", "Decals", "Lighting", "Atmosphere"):
+        scene.add(SceneNode(name=group, parent="Presentation",
+                            metadata={"dispatch_generated": True, "layer": "presentation"}))
+
+    if "patina" in ctx.imports:
+        eid = ext("PackedScene", "presentation/shell.patina.glb", "patina")
+        scene.add(SceneNode(name="StyledShell", parent="Presentation/Materials", instance=eid,
+                            metadata={"dispatch_generated": True, "source": "patina",
+                                      "layer": "presentation"}))
+    if "lux" in ctx.imports:
+        profile = ctx.imports["lux"].meta.get("profile", {})
+        for n in scene.nodes:
+            if n.name == "Lighting" and n.parent == "Presentation":
+                n.metadata.update({
+                    "lux_profile": str(profile.get("preset", profile.get("name", ""))),
+                    "lux_profile_file": f"{res}/presentation/lux/lux.profile.json",
+                })
+        if "volumes" in ctx.imports["lux"].meta:
+            for n in scene.nodes:
+                if n.name == "Atmosphere" and n.parent == "Presentation":
+                    n.metadata["lux_volumes_file"] = f"{res}/presentation/lux/lux.volumes.json"
+
+    _add_props(ctx, scene, ext)
+
+    # -- Handoff -----------------------------------------------------------------
+    scene.add(SceneNode(name="Handoff", parent="."))
+    scene.add(SceneNode(name="OwnershipRequirements", type="Node", parent="Handoff",
+                        metadata={"dispatch_generated": True,
+                                  "file": f"{res}/runtime_ownership_requirements.json"}))
+    scene.add(SceneNode(name="ProposedBeatGraph", type="Node", parent="Handoff",
+                        metadata={"dispatch_generated": True,
+                                  "file": f"{res}/proposed_beat_graph.json"}))
+    scene.add(SceneNode(name="ValidationMetadata", type="Node", parent="Handoff",
+                        metadata={"dispatch_generated": True,
+                                  "dispatch_version": __version__,
+                                  "report_file": f"{res}/validation/report.json"}))
+
+    # -- PreviewOnly (playtest modes or --include-preview) -------------------------
+    if ctx.include_preview:
+        scene.add(SceneNode(name="PreviewOnly", parent="."))
+        bid = ext("Script", "preview_only/preview_mission_bridge.gd", "preview")
+        node = SceneNode(name="PreviewMissionBridge", type="Node", parent="PreviewOnly",
+                         metadata={"dispatch_generated": True, "preview_only": True})
+        node.script = bid
+        node.props["beat_graph_path"] = f"{res}/proposed_beat_graph.json"
         scene.add(node)
 
     return scene
 
 
 def _add_props(ctx: BuildContext, scene: Scene, ext) -> None:
-    """Instantiate prop placements from DC/Lot against the Zoo catalog."""
+    """Prop placements from DC/Lot against the Zoo catalog -> Presentation/Props.
+
+    Placement is presentation; any gameplay function a prop implies (cover,
+    blocking) is declared via gameplay_tags metadata for the runtime to honor.
+    """
+    from .anchors import blender_to_godot
     zoo = ctx.imports.get("zoo")
     catalog = zoo.meta.get("assets", {}) if zoo else {}
     props_dir = zoo.meta.get("props_dir") if zoo else None
@@ -214,22 +266,21 @@ def _add_props(ctx: BuildContext, scene: Scene, ext) -> None:
         aid = str(p.get("asset_id", ""))
         counter[aid] = counter.get(aid, 0) + 1
         name = f"{aid}_{counter[aid]:02d}"
-        from .anchors import blender_to_godot
-        raw = p.get("pos", (0, 0, 0))
-        pos = blender_to_godot(raw)
-        md = {"dispatch_generated": True, "asset_id": aid, "source": tool}
-        glb = (props_dir / f"{aid}.glb") if props_dir else None
-        if glb and glb.is_file():
-            eid = ext("PackedScene", f"assets/props/{aid}.glb", f"prop_{aid}")
-            node = SceneNode(name=name, parent="World/PropsRoot", instance=eid,
-                             pos=pos, rot_y=float(p.get("rot_y", 0.0)), metadata=md)
-        else:
-            md["missing_asset"] = True
-            node = SceneNode(name=name, type="Marker3D", parent="World/PropsRoot",
-                             pos=pos, rot_y=float(p.get("rot_y", 0.0)), metadata=md)
+        pos = blender_to_godot(p.get("pos", (0, 0, 0)))
+        md = {"dispatch_generated": True, "asset_id": aid, "source": tool,
+              "layer": "presentation"}
         meta = catalog.get(aid, {})
         if meta.get("gameplay_tags"):
             md["gameplay_tags"] = list(meta["gameplay_tags"])
+        glb = (props_dir / f"{aid}.glb") if props_dir else None
+        if glb and glb.is_file():
+            eid = ext("PackedScene", f"presentation/props/{aid}.glb", f"prop_{aid}")
+            node = SceneNode(name=name, parent="Presentation/Props", instance=eid,
+                             pos=pos, rot_y=float(p.get("rot_y", 0.0)), metadata=md)
+        else:
+            md["missing_asset"] = True
+            node = SceneNode(name=name, type="Marker3D", parent="Presentation/Props",
+                             pos=pos, rot_y=float(p.get("rot_y", 0.0)), metadata=md)
         scene.add(node)
 
 
@@ -241,11 +292,12 @@ def default_out_dir(spec: MissionSpec) -> Path:
 
 
 def export_package(ctx: BuildContext, scene: Scene, out_dir: Path) -> dict:
-    """Write the mission package. Returns the manifest dict."""
+    """Write the mission shell package (handoff spec section 10)."""
     spec = ctx.spec
     out_dir.mkdir(parents=True, exist_ok=True)
-    assets = out_dir / "assets"
-    assets.mkdir(exist_ok=True)
+    (out_dir / "assets").mkdir(exist_ok=True)
+    pres = out_dir / "presentation"
+    pres.mkdir(exist_ok=True)
 
     copied = []
 
@@ -255,20 +307,26 @@ def export_package(ctx: BuildContext, scene: Scene, out_dir: Path) -> dict:
         shutil.copyfile(src, dst)
         copied.append(rel)
 
+    # functional assets
     if "deli_counter" in ctx.imports:
         copy(ctx.imports["deli_counter"].meta["glb"], "assets/shell.glb")
+        coll = ctx.imports["deli_counter"].files.get("shell.collision.json")
+        if coll:
+            copy(coll, "assets/shell.collision.json")
     if "lot" in ctx.imports:
         copy(ctx.imports["lot"].meta["glb"], "assets/lot.glb")
+
+    # presentation assets
     if "patina" in ctx.imports:
-        copy(ctx.imports["patina"].meta["glb"], "assets/shell.patina.glb")
+        copy(ctx.imports["patina"].meta["glb"], "presentation/shell.patina.glb")
         tex = ctx.imports["patina"].files.get("textures")
         if tex and tex.is_dir():
-            shutil.copytree(tex, assets / "textures", dirs_exist_ok=True)
-            copied.append("assets/textures/")
+            shutil.copytree(tex, pres / "textures", dirs_exist_ok=True)
+            copied.append("presentation/textures/")
     if "lux" in ctx.imports:
         for name, path in sorted(ctx.imports["lux"].files.items()):
             if path.is_file():
-                copy(path, f"assets/lux/{name}")
+                copy(path, f"presentation/lux/{name}")
     zoo = ctx.imports.get("zoo")
     if zoo and zoo.meta.get("props_dir"):
         used = {str(p.get("asset_id")) for t in ("deli_counter", "lot") if t in ctx.imports
@@ -276,48 +334,62 @@ def export_package(ctx: BuildContext, scene: Scene, out_dir: Path) -> dict:
         for aid in sorted(used):
             glb = zoo.meta["props_dir"] / f"{aid}.glb"
             if glb.is_file():
-                copy(glb, f"assets/props/{aid}.glb")
+                copy(glb, f"presentation/props/{aid}.glb")
 
-    # scene + scripts + config
+    # scene + handoff data
     (out_dir / "mission.tscn").write_text(serialize(scene), encoding="utf-8")
-    _write_gd(out_dir, "mission_runtime.gd", "mission_runtime.gd.tpl", spec)
-    _write_gd(out_dir, "mission_config.gd", "mission_config.gd.tpl", spec)
-    (out_dir / "mission_config.tres").write_text(_config_tres(ctx), encoding="utf-8")
+    (out_dir / "gameplay_anchors.json").write_text(
+        json.dumps(ctx.registry, indent=2) + "\n", encoding="utf-8")
+    (out_dir / "proposed_beat_graph.json").write_text(
+        json.dumps(ctx.beats.to_json(), indent=2) + "\n", encoding="utf-8")
+    (out_dir / "runtime_ownership_requirements.json").write_text(
+        json.dumps(ctx.ownership, indent=2) + "\n", encoding="utf-8")
+    nav = ctx.nav.to_json(bridge_radius=float(spec.tuning["nav_bridge_radius"]))
+    (out_dir / "navigation_hints.json").write_text(
+        json.dumps(nav, indent=2) + "\n", encoding="utf-8")
 
-    # authority + nav data
-    (out_dir / "network_authority_map.json").write_text(
-        json.dumps(ctx.authority, indent=2) + "\n", encoding="utf-8")
-    nav_dir = out_dir / "nav"
-    nav_dir.mkdir(exist_ok=True)
-    (nav_dir / "navgraph.json").write_text(
-        json.dumps(ctx.nav.to_json(), indent=2) + "\n", encoding="utf-8")
-    (nav_dir / "cover_points.json").write_text(
-        json.dumps(_anchor_dump(ctx, "cover"), indent=2) + "\n", encoding="utf-8")
-    (nav_dir / "ai_routes.json").write_text(
-        json.dumps(_anchor_dump(ctx, "patrol_point"), indent=2) + "\n", encoding="utf-8")
-
-    write_lock_file(spec, ctx.resolved, out_dir)
+    # mode-specific code packages
+    files = []
+    if ctx.include_preview:
+        pdir = out_dir / "preview_only"
+        pdir.mkdir(exist_ok=True)
+        _write_gd(pdir, "preview_mission_bridge.gd", "preview_mission_bridge.gd.tpl", spec)
+        files.append("preview_only/preview_mission_bridge.gd")
+    else:
+        # handoff scenes must carry no preview code from earlier builds
+        shutil.rmtree(out_dir / "preview_only", ignore_errors=True)
+    if ctx.mode == "runtime-adapter":
+        adir = out_dir / "adapters"
+        adir.mkdir(exist_ok=True)
+        for name in ("mission_events.gd", "anchor_adapter.gd", "adapter_registry.gd"):
+            _write_gd(adir, name, f"{name}.tpl", spec)
+            files.append(f"adapters/{name}")
+    else:
+        shutil.rmtree(out_dir / "adapters", ignore_errors=True)
 
     manifest = {
-        "schema": "dispatch.manifest.v0.1",
+        "schema": "dispatch.manifest.v0.2",
         "dispatch_version": __version__,
         "marker": GENERATED_MARKER,
+        "mode": ctx.mode,
+        "include_preview": ctx.include_preview,
         "mission_id": spec.mission_id,
         "title": spec.title,
         "engine": spec.engine,
-        "mode": spec.mode,
+        "mode_of_play": spec.mode,
         "players": {"min": spec.players_min, "max": spec.players_max,
                     "preferred": spec.players_preferred},
-        "networking": {"model": spec.net_model},
+        "intended_networking": {"model": spec.net_model,
+                                "implemented_by": "production game runtime"},
         "res_root": ctx.res_root,
         "inputs": {t: rt.schema for t, rt in sorted(ctx.resolved.tools.items())},
-        "flow": ctx.flow.to_json(),
         "anchor_counts": _anchor_counts(ctx),
-        "files": sorted(copied) + [
-            "mission.tscn", "mission_config.gd", "mission_config.tres",
-            "mission_runtime.gd", "network_authority_map.json",
-            "nav/navgraph.json", "nav/cover_points.json", "nav/ai_routes.json",
-            "build.lock.json",
+        "beat_count": len(ctx.beats.beats),
+        "files": sorted(copied) + sorted(files) + [
+            "mission.tscn", "mission_manifest.json", "gameplay_anchors.json",
+            "proposed_beat_graph.json", "runtime_ownership_requirements.json",
+            "navigation_hints.json", "build.lock.json", "resource_manifest.json",
+            "HANDOFF.md", "LICENSES.md",
         ],
     }
     (out_dir / "mission_manifest.json").write_text(
@@ -332,47 +404,7 @@ def _anchor_counts(ctx: BuildContext) -> dict:
     return dict(sorted(counts.items()))
 
 
-def _anchor_dump(ctx: BuildContext, kind: str) -> dict:
-    return {
-        "schema": f"dispatch.{kind}.v0.1",
-        "items": [
-            {"id": a.id, "pos": list(a.pos), "rot_y": a.rot_y,
-             "tags": list(a.tags), "source": a.source}
-            for a in ctx.anchors if a.type == kind
-        ],
-    }
-
-
 def _write_gd(out_dir: Path, name: str, tpl: str, spec: MissionSpec) -> None:
     text = (GD_DIR / tpl).read_text(encoding="utf-8")
     text = text.replace("{version}", __version__).replace("{mission_id}", spec.mission_id)
-    text = text.replace("{{}}", "{}")
     (out_dir / name).write_text(text, encoding="utf-8")
-
-
-def _config_tres(ctx: BuildContext) -> str:
-    from .tscn import _gd_value
-    spec = ctx.spec
-    flow = ctx.flow.to_json()
-    steps = [
-        {"name": s["name"], "state": s["state"], "objective": s["objective"],
-         "trigger": s["trigger"], "anchor_ids": s["anchor_ids"]}
-        for s in flow["steps"]
-    ]
-    lines = [
-        "[gd_resource type=\"Resource\" load_steps=2 format=3]",
-        "",
-        f'[ext_resource type="Script" path="{ctx.res_root}/mission_config.gd" id="1_cfg"]',
-        "",
-        "[resource]",
-        'script = ExtResource("1_cfg")',
-        f'mission_id = {_gd_value(spec.mission_id)}',
-        f'title = {_gd_value(spec.title)}',
-        f'mode = {_gd_value(spec.mode)}',
-        f'net_model = {_gd_value(spec.net_model)}',
-        f'players_min = {spec.players_min}',
-        f'players_max = {spec.players_max}',
-        f'states = {_gd_value(flow["states"])}',
-        f'steps = {_gd_value(steps)}',
-    ]
-    return "\n".join(lines) + "\n"

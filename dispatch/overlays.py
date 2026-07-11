@@ -144,8 +144,8 @@ def write_overlays(ctx, out_dir: Path) -> list:
     _nav_backdrop(ctx, proj, c)
     anchors_by_id = {a.id: a for a in ctx.anchors}
     prev = None
-    for step in ctx.flow.steps:
-        pts = [anchors_by_id[i] for i in step.anchor_ids if i in anchors_by_id]
+    for beat in ctx.beats.beats:
+        pts = [anchors_by_id[i] for i in beat.anchor_ids if i in anchors_by_id]
         if not pts:
             continue
         cur = proj.to_px(pts[0].pos)

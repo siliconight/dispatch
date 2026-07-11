@@ -27,8 +27,16 @@ def test_optional_tool_skipped(world, spec):
 
 def test_lock_file(spec, tmp_path):
     r = resolve_inputs(spec)
-    p = write_lock_file(spec, r, tmp_path)
+    (tmp_path / "mission.tscn").write_text("[gd_scene format=3]\n")
+    p = write_lock_file(spec, r, tmp_path, mode="shell-handoff")
     lock = json.loads(p.read_text())
-    dc = lock["inputs"]["deli_counter"]["files"]
-    assert dc["shell.glb"]["sha256"]
-    assert dc["shell.glb"]["bytes"] > 0
+    assert lock["schema"] == "dispatch.build_lock.v0.2"
+    assert lock["contract"] == "dispatch.mission.v0.2"
+    assert lock["mode"] == "shell-handoff"
+    assert lock["spec_sha256"]
+    assert lock["created_at"]
+    roles = {i["role"] for i in lock["inputs"]}
+    assert "mission_spec" in roles and "deli_counter:shell.glb" in roles
+    assert all(i["sha256"] for i in lock["inputs"])
+    outs = {o["path"] for o in lock["outputs"]}
+    assert "mission.tscn" in outs and "build.lock.json" not in outs

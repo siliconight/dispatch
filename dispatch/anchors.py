@@ -1,7 +1,13 @@
-"""Gameplay Anchor Binder (TDD 13.3).
+"""Gameplay Anchor Binder.
 
-Normalizes upstream anchor records into one anchor list, converts
-Blender Z-up coordinates to Godot Y-up, and assigns stable network IDs.
+Normalizes upstream anchor records into one anchor list and converts Blender
+Z-up coordinates to Godot Y-up.
+
+Identity model (handoff spec section 5): every anchor carries a stable SHELL
+ID — the upstream anchor id, deterministic across rebuilds. Shell IDs are not
+network IDs. The production runtime maps a shell ID to whatever network
+entity, replicated actor, or save-state record it chooses; Dispatch records
+that mapping slot as ``runtime_binding: null``.
 """
 
 from __future__ import annotations
@@ -23,8 +29,9 @@ ANCHOR_TYPES = (
     "camera_debug",
 )
 
-# Anchor types whose runtime state must be server-authoritative.
-SERVER_ANCHOR_TYPES = (
+# Anchor types whose runtime state the production game must own
+# server-side. Dispatch declares the requirement; it implements nothing.
+RUNTIME_OWNED_TYPES = (
     "objective",
     "door",
     "loot",
@@ -35,21 +42,84 @@ SERVER_ANCHOR_TYPES = (
     "ai_spawn",
 )
 
-# Presentation-only anchor types: never replicated.
-CLIENT_ANCHOR_TYPES = ("camera_debug",)
+# Static placement data: consumed by the runtime, never replicated as
+# stateful objects by Dispatch's declaration.
+STATIC_ANCHOR_TYPES = ("player_start", "cover", "patrol_point")
+
+# Debug-only anchors: never part of the handoff contract.
+DEBUG_ANCHOR_TYPES = ("camera_debug",)
+
+# anchor type -> adapter interface name the runtime-adapter mode can stub.
+EXPECTED_ADAPTER = {
+    "objective": "objective_point",
+    "door": "openable_door",
+    "loot": "lootable",
+    "extraction": "extraction_zone",
+    "trigger": "trigger_volume",
+    "breach_point": "breachable",
+    "interaction": "interactable",
+    "ai_spawn": "ai_spawn_point",
+}
+
+# Integration status values (handoff spec section 8). Dispatch may set only
+# the first two; the production game pipeline owns the rest.
+DISPATCH_SETTABLE_STATUS = ("unimplemented", "adapter_available")
+GAME_SETTABLE_STATUS = ("integrated", "verified_by_game_runtime")
+INTEGRATION_STATUSES = DISPATCH_SETTABLE_STATUS + GAME_SETTABLE_STATUS
+
+# Stateful types that a late-joining peer must receive current state for.
+_LATE_JOIN_TYPES = ("objective", "door", "loot", "extraction", "trigger",
+                    "breach_point", "interaction", "ai_spawn")
+# Types whose outcome must survive into mission persistence.
+_PERSISTENCE_TYPES = ("objective", "extraction", "loot", "breach_point")
 
 
 @dataclass
 class Anchor:
-    id: str
+    id: str               # stable shell id (NOT a network id)
     type: str
     pos: tuple            # Godot-space (x, y, z), Y-up, meters
     rot_y: float = 0.0    # degrees around Godot up axis
     tags: tuple = ()
     objective: str = ""   # objective key for objective anchors
     source: str = ""      # which tool provided it
-    net_id: int = 0       # stable network id (0 = not replicated)
+    integration_status: str = "unimplemented"
     extra: dict = field(default_factory=dict)
+
+    @property
+    def shell_id(self) -> str:
+        return self.id
+
+    def qualified_id(self, mission_id: str) -> str:
+        """Namespaced shell id (handoff delta D4): two imported missions must
+        not collide, so exported ids are '<mission_id>/<anchor_id>'."""
+        return f"{mission_id}/{self.id}"
+
+    @property
+    def expected_adapter(self) -> str:
+        return EXPECTED_ADAPTER.get(self.type, "")
+
+
+def required_authority_for(anchor: Anchor) -> str:
+    """Declared authority REQUIREMENT (not a description of anything built)."""
+    if anchor.type in RUNTIME_OWNED_TYPES:
+        return "server"
+    return "none"
+
+
+def runtime_requirements_for(anchor: Anchor) -> dict:
+    """Declared requirements the production runtime must satisfy for this
+    anchor (handoff spec section 4). Declarations only — Dispatch prescribes
+    no networking library, RPC names, serialization, or entity IDs.
+    """
+    if anchor.type not in RUNTIME_OWNED_TYPES:
+        return {}
+    return {
+        "authoritative_owner": "server",
+        "replication_required": True,
+        "late_join_state_required": anchor.type in _LATE_JOIN_TYPES,
+        "mission_persistence_required": anchor.type in _PERSISTENCE_TYPES,
+    }
 
 
 def blender_to_godot(pos) -> tuple:
@@ -88,19 +158,6 @@ def normalize_anchors(records: list, source: str, up_axis: str = "z") -> list:
             )
         )
     return out
-
-
-def assign_net_ids(anchors: list, start: int = 1000) -> None:
-    """Deterministic, stable network IDs for replicated anchors.
-
-    Sorted by (type, id) so a rebuild with unchanged upstream data yields
-    identical IDs (TDD 13.5: replicated objects have stable IDs).
-    """
-    nid = start
-    for a in sorted(anchors, key=lambda a: (a.type, a.id)):
-        if a.type in SERVER_ANCHOR_TYPES:
-            a.net_id = nid
-            nid += 1
 
 
 def by_type(anchors: list, kind: str) -> list:

@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import SCHEMA_MISSION, DispatchError
+from . import SCHEMA_MISSION, SCHEMA_MISSION_LEGACY, DispatchError
 
 KNOWN_TOOLS = ("deli_counter", "lot", "zoo", "patina", "lux")
 REQUIRED_TOOLS = ("deli_counter", "lot")
@@ -61,6 +61,7 @@ class MissionSpec:
     budgets: dict
     tuning: dict
     spec_path: Path
+    legacy_schema: bool = False
     raw: dict = field(repr=False, default_factory=dict)
 
     @property
@@ -88,10 +89,10 @@ def load_spec(path: str | Path) -> MissionSpec:
 
 def validate_spec(raw: dict, spec_path: Path) -> MissionSpec:
     schema = raw.get("schema")
-    if schema != SCHEMA_MISSION:
+    if schema not in (SCHEMA_MISSION, SCHEMA_MISSION_LEGACY):
         raise DispatchError(
             f"unsupported mission schema {schema!r}",
-            expected=f'"schema": "{SCHEMA_MISSION}"',
+            expected=f'"schema": "{SCHEMA_MISSION}" (v0.1 is still read for compatibility)',
             suggested_fix="Update the spec schema field or upgrade Dispatch.",
         )
 
@@ -193,5 +194,6 @@ def validate_spec(raw: dict, spec_path: Path) -> MissionSpec:
         budgets=budgets,
         tuning=tuning,
         spec_path=spec_path,
+        legacy_schema=(schema == SCHEMA_MISSION_LEGACY),
         raw=raw,
     )

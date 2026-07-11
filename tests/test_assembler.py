@@ -1,20 +1,32 @@
-from dispatch.assembler import assemble_scene
+from dispatch.assembler import assemble_scene, build_context
+from dispatch.ownership import FORBIDDEN_NODE_NAMES
 
 
 def test_scene_hierarchy(ctx):
     scene = assemble_scene(ctx)
     paths = {scene.node_path(n) for n in scene.nodes}
     for expected in (
-        ".", "World", "World/LotRoot", "World/BuildingRoot", "World/PropsRoot",
-        "World/VisualsRoot", "World/LightingRoot", "World/FXRoot", "World/AudioRoot",
-        "Gameplay/PlayerStarts", "Gameplay/AI/SpawnZones", "Gameplay/Navigation/NavMesh",
-        "Runtime/MissionController", "Runtime/ReplicationRegistry", "Runtime/DebugOverlay",
-        "Gameplay/PlayerStarts/player_start_01",
-        "Gameplay/Objectives/cash_register",
-        "Gameplay/ExtractionPoints/escape_vehicle",
-        "World/VisualsRoot/StyledShell",
+        ".", "Functional", "Functional/Geometry", "Functional/Collision",
+        "Functional/GameplayAnchors", "Functional/NavigationHints",
+        "Functional/Geometry/Shell", "Functional/Geometry/LotSite",
+        "Functional/NavigationHints/NavMesh",
+        "Presentation/Props", "Presentation/Materials", "Presentation/Decals",
+        "Presentation/Lighting", "Presentation/Atmosphere",
+        "Presentation/Materials/StyledShell",
+        "Handoff/OwnershipRequirements", "Handoff/ProposedBeatGraph",
+        "Handoff/ValidationMetadata",
+        "Functional/GameplayAnchors/PlayerStarts/player_start_01",
+        "Functional/GameplayAnchors/Objectives/cash_register",
+        "Functional/GameplayAnchors/ExtractionPoints/escape_vehicle",
     ):
         assert expected in paths, expected
+
+
+def test_no_forbidden_runtime_nodes(ctx):
+    scene = assemble_scene(ctx)
+    names = {n.name for n in scene.nodes}
+    assert not names.intersection(FORBIDDEN_NODE_NAMES)
+    assert "PreviewOnly" not in names  # shell-handoff carries no preview
 
 
 def test_coordinate_conversion(ctx):
@@ -27,9 +39,28 @@ def test_coordinate_conversion(ctx):
 def test_anchor_metadata(ctx):
     scene = assemble_scene(ctx)
     loot = next(n for n in scene.nodes if n.name == "register_loot")
+    assert loot.metadata["shell_id"] == "gas_station_robbery_001/register_loot"
     assert loot.metadata["anchor_type"] == "loot"
-    assert loot.metadata["authority"] == "server"
-    assert loot.metadata["net_id"] >= 1000
-    start = next(n for n in scene.nodes if n.name == "player_start_01")
-    assert start.metadata["authority"] == "static"
-    assert "net_id" not in start.metadata
+    assert loot.metadata["integration_status"] == "unimplemented"
+    assert loot.metadata["expected_adapter"] == "lootable"
+    assert loot.metadata["required_authority"] == "server"
+    assert "net_id" not in loot.metadata
+    assert "authority" not in loot.metadata  # required_authority is the v0.2+ key
+    cover = next(n for n in scene.nodes if n.name == "pump_cover_a")
+    assert cover.metadata["required_authority"] == "none"
+
+
+def test_props_are_presentation(ctx):
+    scene = assemble_scene(ctx)
+    prop = next(n for n in scene.nodes if n.name == "dumpster_01_01")
+    assert prop.parent == "Presentation/Props"
+    assert prop.metadata["layer"] == "presentation"
+
+
+def test_preview_mode_adds_bridge(spec):
+    ctx = build_context(spec, mode="preview-playtest")
+    scene = assemble_scene(ctx)
+    paths = {scene.node_path(n) for n in scene.nodes}
+    assert "PreviewOnly/PreviewMissionBridge" in paths
+    bridge = next(n for n in scene.nodes if n.name == "PreviewMissionBridge")
+    assert bridge.props["beat_graph_path"].endswith("proposed_beat_graph.json")

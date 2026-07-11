@@ -3,9 +3,10 @@
 Assemble the mission. Validate the mission. Package the mission for online play.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
 
-SCHEMA_MISSION = "dispatch.mission.v0.1"
+SCHEMA_MISSION = "dispatch.mission.v0.2"
+SCHEMA_MISSION_LEGACY = "dispatch.mission.v0.1"
 GENERATED_MARKER = "[DISPATCH_GENERATED]"
 
 

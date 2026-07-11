@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from ..anchors import by_type
-from ..authority import node_path_for
+from ..ownership import node_path_for
 from . import Issue
 
 SYSTEM = "multiplayer_spawns"

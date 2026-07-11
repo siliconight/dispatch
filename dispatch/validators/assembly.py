@@ -17,11 +17,11 @@ def validate(ctx) -> list:
             ))
     for w in ctx.warnings:
         issues.append(Issue("info", "assembly", w))
-    for step in ctx.flow.unbound:
+    for beat in ctx.beats.unbound:
         issues.append(Issue(
             "blocker", "assembly",
-            f"Mission flow step {step!r} binds to no anchor and has no trigger.",
-            "Add a matching objective/tag on an upstream anchor, or give the step a trigger.",
+            f"Proposed beat {beat!r} binds to no anchor and has no trigger.",
+            "Add a matching objective/tag on an upstream anchor, or give the beat a trigger.",
         ))
     if not by_type(ctx.anchors, "player_start"):
         issues.append(Issue(

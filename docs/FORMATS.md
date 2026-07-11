@@ -1,11 +1,11 @@
-# Dispatch Data Contracts (v0.1)
+# Dispatch Data Contracts (v0.2)
 
 All positions in upstream files are meters, Blender Z-up by default. Any file
 may declare `"up_axis": "y"` to opt out of the `(x, y, z) -> (x, z, -y)`
 conversion. Dispatch reads these files; it never writes into upstream build
 directories.
 
-## Mission spec — `dispatch.mission.json` (schema `dispatch.mission.v0.1`)
+## Mission spec — `dispatch.mission.json` (schema `dispatch.mission.v0.2`; v0.1 read for compatibility)
 
 See TDD section 9 and `examples/gas_station_robbery_001/dispatch.mission.json`.
 Optional blocks Dispatch honors beyond the TDD example:
@@ -105,22 +105,64 @@ lux.volumes.json          passed through
 Lighting is client presentation. The Lux addon owns the runtime look; Dispatch
 records the profile and copies the files to `assets/lux/`.
 
+## License records (delta D10)
+
+Any input manifest may carry:
+
+```json
+"license": { "name": "proprietary-siliconight", "source": "...", "notes": "..." }
+```
+
+Absent = `unknown`. Aggregated into `LICENSES.md`; unknown bundled licenses
+warn by default and block under `--strict-licenses`.
+
+## Contract probe (delta D12)
+
+`dispatch contract` prints JSON: tool, version, contract id, modes, emitted
+schemas, capabilities. Pipeline adapters must parse this instead of prose.
+
 ## Outputs
 
 ```
-mission.tscn                    Godot 4 scene, format=3, deterministic
-mission_config.gd / .tres       compiled flow resource (states + steps + anchor bindings)
-mission_runtime.gd              server-authoritative controller skeleton
-mission_manifest.json           schema dispatch.manifest.v0.1 — build record
-network_authority_map.json      schema dispatch.authority.v0.1 — roots + replication registry
-nav/navgraph.json               merged graph (schema dispatch.navgraph.v0.1)
-nav/cover_points.json           cover anchors
-nav/ai_routes.json              patrol anchors
-build.lock.json                 schema dispatch.lock.v0.1 — upstream hashes
-validation/report.{md,json,html}
-validation/overlays/*.png       nav, spawn, objective_flow, cover (top-down; image x = +X, image y = +Z)
+mission.tscn                          Godot 4 scene: Functional / Presentation / Handoff
+                                      (+ PreviewOnly in preview mode); format=3, deterministic
+mission_manifest.json                 schema dispatch.manifest.v0.2 — build record incl. mode
+gameplay_anchors.json                 schema dispatch.gameplay_anchors.v0.2 — flat shell-id
+                                      registry (namespaced <mission_id>/<anchor_id>), sorted by
+                                      shell_id: transform, tags, source_tool, source_building,
+                                      required_authority, expected_adapter, integration_status,
+                                      runtime_binding (always null from Dispatch),
+                                      runtime_requirements. Validated to exactly match the
+                                      anchors in mission.tscn (blocking).
+proposed_beat_graph.json              schema dispatch.proposed_beat_graph.v0.2 — design intent
+                                      only: beats (id, type: location|objective|extraction|
+                                      trigger|carry, status: always "proposed", shell_ids)
+                                      + connections
+runtime_ownership_requirements.json   schema dispatch.runtime_ownership_requirements.v0.2 —
+                                      requirements, not a map: per-anchor declarations the
+                                      production runtime must satisfy (owner, replication,
+                                      late-join state, persistence); integration_status always
+                                      "unimplemented" here. No networking library, RPC names,
+                                      serialization, or network entity IDs are prescribed.
+navigation_hints.json                 schema dispatch.navigation_hints.v0.2 — merged node/edge
+                                      graph; auto-bridge edges flagged bridged:true with the
+                                      bridge_radius that produced them; navmesh: bake_required
+resource_manifest.json                schema dispatch.resource_manifest.v0.2 — every package
+                                      file with sha256; requires_editor_plugins/autoloads: false
+LICENSES.md                           aggregated upstream license records
+HANDOFF.md                            engineering handoff: verbatim boundary language,
+                                      integration checklist, non-claims
+build.lock.json                       schema dispatch.build_lock.v0.2 — spec hash, per-role
+                                      input hashes, per-file output hashes, created_at
+assets/                               functional geometry (shell.glb, lot.glb, collision manifest)
+presentation/                         patina shell, textures, lux files, prop GLBs
+validation/report.{md,json,html}      BLUF-first; integration_ready flag; "not validated" list
+validation/overlays/*.png             nav, spawn, objective_flow, cover (top-down; x=+X, y=+Z)
+preview_only/preview_mission_bridge.gd    preview-playtest mode only; # DISPATCH PREVIEW ONLY header
+adapters/*.gd                         runtime-adapter mode only; interface stubs, no RPCs
 ```
 
-Network ids in the replication registry are assigned deterministically by
-sorted (anchor type, id) starting at 1000 — stable across rebuilds when
-upstream ids are stable.
+Shell IDs are stable, deterministic build identifiers — never network IDs.
+Integration status values Dispatch may emit: `unimplemented`,
+`adapter_available`. `integrated` and `verified_by_game_runtime` belong to the
+production game pipeline.

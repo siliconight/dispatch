@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..anchors import by_type
-from ..authority import node_path_for
+from ..ownership import node_path_for
 from . import Issue
 
 SYSTEM = "ai_nav"

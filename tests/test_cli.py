@@ -7,10 +7,11 @@ def test_build_end_to_end(world, capsys):
     rc = main(["build", str(world / "dispatch.mission.json")])
     assert rc == 0
     out = world / "export/godot/missions/gas_station_robbery_001"
-    for rel in ("mission.tscn", "mission_manifest.json", "network_authority_map.json",
-                "mission_config.tres", "mission_runtime.gd", "build.lock.json",
+    for rel in ("mission.tscn", "mission_manifest.json", "gameplay_anchors.json",
+                "proposed_beat_graph.json", "runtime_ownership_requirements.json",
+                "navigation_hints.json", "build.lock.json", "HANDOFF.md",
                 "validation/report.md", "validation/report.json", "validation/report.html",
-                "validation/overlays/nav_overlay.png", "nav/navgraph.json"):
+                "validation/overlays/nav_overlay.png"):
         assert (out / rel).is_file(), rel
     manifest = json.loads((out / "mission_manifest.json").read_text())
     assert manifest["mission_id"] == "gas_station_robbery_001"

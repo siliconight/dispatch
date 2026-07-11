@@ -1,8 +1,10 @@
-"""Mission Readiness Score (TDD 16).
+"""Mission Shell Readiness Score.
 
 Structural readiness only. This is not a fun score — fun is a feel property
 and offline fun-scores are confidently wrong. The score reflects whether the
-mission is assembled, connected, network-safe, and inside budget.
+shell is assembled, connected, declaration-complete, and inside budget. It
+says nothing about implemented gameplay, networking correctness, or shipping
+online playability — the production runtime owns those.
 """
 
 from __future__ import annotations
@@ -11,21 +13,21 @@ from __future__ import annotations
 CATEGORY_OF = {
     "assembly": "assembly",
     "objective_reachability": "objective_flow",
-    "online_runtime": "online_runtime",
+    "integration_readiness": "integration_readiness",
     "ai_nav": "ai_readiness",
     "multiplayer_spawns": "multiplayer",
     "performance": "performance",
 }
 
-CATEGORIES = ("assembly", "objective_flow", "online_runtime",
+CATEGORIES = ("assembly", "objective_flow", "integration_readiness",
               "ai_readiness", "multiplayer", "performance")
 
 PENALTY = {"blocker": 60, "major": 25, "moderate": 10, "minor": 3, "info": 0}
 
 STATUS_BANDS = (
-    (90, "ready_for_review"),
-    (75, "ready_for_playtest"),
-    (60, "playable_with_major_issues"),
+    (90, "ready_for_handoff"),
+    (75, "handoff_with_issues"),
+    (60, "major_structural_issues"),
     (40, "prototype_only"),
     (0, "broken"),
 )

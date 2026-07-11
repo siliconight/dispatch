@@ -1,5 +1,5 @@
 from dispatch.anchors import normalize_anchors
-from dispatch.flow import compile_flow
+from dispatch.flow import compile_beats
 
 
 ANCHORS = normalize_anchors([
@@ -9,24 +9,40 @@ ANCHORS = normalize_anchors([
 ], "dc")
 
 
-def test_binding_by_tag_and_objective():
-    flow = compile_flow([
+def test_binding_and_types():
+    g = compile_beats([
         {"step": "spawn", "location_tag": "street_start"},
         {"step": "loot", "objective": "open_register"},
         {"step": "escape", "objective": "reach_exit"},
-    ], ANCHORS)
-    assert flow.steps[0].anchor_ids == ("start_1",)
-    assert flow.steps[1].anchor_ids == ("reg",)
-    assert flow.steps[2].anchor_ids == ("exit",)
-    assert flow.unbound == []
-    assert flow.states == ["PRE_MISSION", "SPAWN", "LOOT", "ESCAPE", "COMPLETE"]
+    ], ANCHORS, "m1")
+    assert g.graph_id == "m1"
+    assert [b.anchor_ids for b in g.beats] == [("start_1",), ("reg",), ("exit",)]
+    assert [b.type for b in g.beats] == ["location", "objective", "extraction"]
+    assert g.connections == [["spawn", "loot"], ["loot", "escape"]]
+    assert g.unbound == []
 
 
-def test_trigger_step_needs_no_anchor():
-    flow = compile_flow([{"step": "go_hot", "trigger": "alarm"}], ANCHORS)
-    assert flow.unbound == []
+def test_trigger_beat_needs_no_anchor():
+    g = compile_beats([{"step": "go_hot", "trigger": "alarm"}], ANCHORS, "m1")
+    assert g.unbound == []
+    assert g.beats[0].type == "trigger"
 
 
-def test_unbound_step_detected():
-    flow = compile_flow([{"step": "mystery", "objective": "nothing_matches"}], ANCHORS)
-    assert flow.unbound == ["mystery"]
+def test_unbound_beat_detected():
+    g = compile_beats([{"step": "mystery", "objective": "nothing_matches"}], ANCHORS, "m1")
+    assert g.unbound == ["mystery"]
+
+
+def test_explicit_type_wins():
+    g = compile_beats([{"step": "haul", "objective": "open_register", "type": "carry"}], ANCHORS, "m1")
+    assert g.beats[0].type == "carry"
+
+
+def test_graph_json_shape():
+    g = compile_beats([{"step": "loot", "objective": "open_register"}], ANCHORS, "m1")
+    j = g.to_json()
+    assert j["schema"] == "dispatch.proposed_beat_graph.v0.2"
+    assert j["beats"][0]["id"] == "loot"
+    assert j["beats"][0]["status"] == "proposed"
+    assert j["beats"][0]["shell_ids"] == ["m1/reg"]  # namespaced (delta D4)
+    assert "runtime owns" in j["statement"]

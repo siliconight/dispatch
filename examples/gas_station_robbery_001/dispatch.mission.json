@@ -1,5 +1,5 @@
 {
-  "schema": "dispatch.mission.v0.1",
+  "schema": "dispatch.mission.v0.2",
   "mission_id": "gas_station_robbery_001",
   "title": "Gas Station Robbery",
   "engine": "godot_4_7",
