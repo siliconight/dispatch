@@ -1,5 +1,17 @@
 # Dispatch
 
+
+> **Read [`../PIPELINE_MAP.md`](../PIPELINE_MAP.md) before changing anything here.**
+> It covers every repo's role, the job DAG, where artifacts land, and the two
+> rules everything follows from: the deliverable is a level shell that must work
+> standalone in somebody else's Godot project with none of these tools present,
+> and **these tools are not the authority on gameplay or networking**.
+>
+> This repo owns assembling the package the consuming game takes, and stating the boundary in `runtime_ownership_requirements.json`. This stage produces the actual deliverable.
+> It does not decide gameplay — its beat graph is `proposed`, its nav output is `hints`.
+>
+> Live state of the current work: [`../PIPELINE_ROADMAP.md`](../PIPELINE_ROADMAP.md).
+
 Mission shell assembly, validation, and handoff for Godot 4.7.
 
 > Dispatch validates that a mission shell is ready to receive an authoritative runtime. It does not provide or prove that runtime.

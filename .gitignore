@@ -5,3 +5,6 @@ __pycache__/
 build/
 dist/
 examples/*/export/
+
+# Level Factory smoke-test output written into this repo; build artifacts.
+_lf_smoke_out/
