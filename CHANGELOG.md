@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.1 — 2026-08-14
+
+Documentation only. No behaviour change, no contract change; the contract
+stays `dispatch.mission.v0.2`.
+
+- **README** points at `PIPELINE_MAP.md` and states what this repo owns
+  (`bf356954`).
+
+Cut because `verify-manifest` reported dispatch STALE: one commit newer than
+the VERSION naming it. A docs-only change is a PATCH by this factory's own
+rule, and a version that refuses to move for a real difference leaves the
+check permanently unhappy about something true.
+
 ## v0.3.0 — 2026-07-11
 
 Level Factory integration release per the "Dispatch v0.2 shell-handoff Contract Delta" (contract stays `dispatch.mission.v0.2`; tool version 0.3.0). Ships the delta items not already covered by v0.2.0's repositioning, and aligns v0.2.0's output to the delta's exact schema shapes.
