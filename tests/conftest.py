@@ -33,6 +33,6 @@ def ctx(spec):
 
 
 def edit_json(path: Path, fn) -> None:
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     fn(data)
-    path.write_text(json.dumps(data, indent=2))
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")

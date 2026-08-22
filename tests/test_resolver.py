@@ -29,7 +29,7 @@ def test_lock_file(spec, tmp_path):
     r = resolve_inputs(spec)
     (tmp_path / "mission.tscn").write_text("[gd_scene format=3]\n")
     p = write_lock_file(spec, r, tmp_path, mode="shell-handoff")
-    lock = json.loads(p.read_text())
+    lock = json.loads(p.read_text(encoding="utf-8"))
     assert lock["schema"] == "dispatch.build_lock.v0.2"
     assert lock["contract"] == "dispatch.mission.v0.2"
     assert lock["mode"] == "shell-handoff"

@@ -34,7 +34,7 @@ def test_interactives_ship_beside_the_anchors(world, tmp_path):
 
     out = tmp_path / "pkg"
     manifest = export_package(ctx, scene, out)
-    data = json.loads((out / "interactives.json").read_text())
+    data = json.loads((out / "interactives.json").read_text(encoding="utf-8"))
     # verbatim: the whole state machine, untouched — id, transitions,
     # advisory hints and all. Dispatch ships, it never edits (TDD 2).
     assert data["interactives"] == INTER
@@ -52,7 +52,7 @@ def test_no_interactives_still_ships_the_empty_declaration(ctx, tmp_path):
     scene = assemble_scene(ctx)
     out = tmp_path / "pkg"
     manifest = export_package(ctx, scene, out)
-    data = json.loads((out / "interactives.json").read_text())
+    data = json.loads((out / "interactives.json").read_text(encoding="utf-8"))
     assert data["interactives"] == []
     assert manifest["interactive_count"] == 0
     assert "interactives.json" in manifest["files"]
@@ -69,6 +69,6 @@ def test_deli_counter_carries_when_lot_is_absent(world, tmp_path):
     scene = assemble_scene(ctx)
     out = tmp_path / "pkg"
     manifest = export_package(ctx, scene, out)
-    data = json.loads((out / "interactives.json").read_text())
+    data = json.loads((out / "interactives.json").read_text(encoding="utf-8"))
     assert data["interactives"] == INTER
     assert manifest["interactive_count"] == 1

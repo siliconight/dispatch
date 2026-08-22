@@ -7,9 +7,9 @@ from dispatch.validators import run_all
 
 def test_v01_schema_still_reads(world):
     p = world / "dispatch.mission.json"
-    d = json.loads(p.read_text())
+    d = json.loads(p.read_text(encoding="utf-8"))
     d["schema"] = "dispatch.mission.v0.1"
-    p.write_text(json.dumps(d))
+    p.write_text(json.dumps(d), encoding="utf-8")
     spec = load_spec(p)
     assert spec.legacy_schema is True
     ctx = build_context(spec)

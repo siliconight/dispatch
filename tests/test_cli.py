@@ -13,7 +13,7 @@ def test_build_end_to_end(world, capsys):
                 "validation/report.md", "validation/report.json", "validation/report.html",
                 "validation/overlays/nav_overlay.png"):
         assert (out / rel).is_file(), rel
-    manifest = json.loads((out / "mission_manifest.json").read_text())
+    manifest = json.loads((out / "mission_manifest.json").read_text(encoding="utf-8"))
     assert manifest["mission_id"] == "gas_station_robbery_001"
     assert manifest["anchor_counts"]["player_start"] == 4
     assert "readiness 100" in capsys.readouterr().out
@@ -21,9 +21,9 @@ def test_build_end_to_end(world, capsys):
 
 def test_build_exit_1_on_blocker(world, capsys):
     p = world / "build/lot/lot.nav_hints.json"
-    d = json.loads(p.read_text())
+    d = json.loads(p.read_text(encoding="utf-8"))
     d["links"] = [l for l in d["links"] if l != ["curb", "lot_edge"]]
-    p.write_text(json.dumps(d))
+    p.write_text(json.dumps(d), encoding="utf-8")
     rc = main(["build", str(world / "dispatch.mission.json")])
     assert rc == 1
     assert "BLOCKER" in capsys.readouterr().out
@@ -49,7 +49,7 @@ def test_validate_writes_reports_only(world):
 def test_init(tmp_path, capsys):
     rc = main(["init", "warehouse_raid_001", "--out", str(tmp_path / "wr")])
     assert rc == 0
-    spec = json.loads((tmp_path / "wr" / "dispatch.mission.json").read_text())
+    spec = json.loads((tmp_path / "wr" / "dispatch.mission.json").read_text(encoding="utf-8"))
     assert spec["mission_id"] == "warehouse_raid_001"
     assert (tmp_path / "wr" / "build" / "deli_counter").is_dir()
     # refuses to overwrite

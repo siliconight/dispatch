@@ -55,9 +55,9 @@ def test_anchor_parity_clean_and_tampered(world):
     assert _build(world) == 0
     out = _out(world)
     assert check_anchor_parity(out) == []
-    reg = json.loads((out / "gameplay_anchors.json").read_text())
+    reg = json.loads((out / "gameplay_anchors.json").read_text(encoding="utf-8"))
     reg["anchors"].append(dict(reg["anchors"][0], shell_id=f"{MID}/ghost_anchor"))
-    (out / "gameplay_anchors.json").write_text(json.dumps(reg))
+    (out / "gameplay_anchors.json").write_text(json.dumps(reg), encoding="utf-8")
     issues = check_anchor_parity(out)
     assert any(i.severity == "blocker" and "ghost_anchor" in i.message for i in issues)
 
@@ -74,7 +74,7 @@ def test_closure_rejects_absolute_and_external(world):
     assert _build(world) == 0
     out = _out(world)
     tscn = out / "mission.tscn"
-    text = tscn.read_text()
+    text = tscn.read_text(encoding="utf-8")
     text = text.replace(
         '[gd_scene',
         '[ext_resource type="Texture2D" path="C:/Users/bg/leak.png" id="99_leak"]\n'
@@ -99,7 +99,7 @@ def test_closure_rejects_missing_emitted_file(world):
 def test_resource_manifest(world):
     assert _build(world) == 0
     out = _out(world)
-    d = json.loads((out / "resource_manifest.json").read_text())
+    d = json.loads((out / "resource_manifest.json").read_text(encoding="utf-8"))
     assert d["schema"] == "dispatch.resource_manifest.v0.2"
     assert d["requires_editor_plugins"] is False
     assert d["requires_autoloads"] is False
@@ -113,18 +113,18 @@ def test_resource_manifest(world):
 
 def test_licenses_known_clean(world, capsys):
     assert _build(world) == 0
-    text = (_out(world) / "LICENSES.md").read_text()
+    text = (_out(world) / "LICENSES.md").read_text(encoding="utf-8")
     assert "proprietary-siliconight" in text
     assert "unknown" not in text.split("`unknown`")[-1] or True  # records all known
 
 
 def test_licenses_unknown_warns_then_blocks(world):
     p = world / "build/lux/lux.profile.json"
-    d = json.loads(p.read_text())
+    d = json.loads(p.read_text(encoding="utf-8"))
     del d["license"]
-    p.write_text(json.dumps(d))
+    p.write_text(json.dumps(d), encoding="utf-8")
     assert _build(world) == 0  # default: warn only
-    report = json.loads((_out(world) / "validation/report.json").read_text())
+    report = json.loads((_out(world) / "validation/report.json").read_text(encoding="utf-8"))
     assert any(i["system"] == "licenses" and i["severity"] == "moderate"
                for i in report["issues"])
     assert _build(world, "--strict-licenses") == 1  # strict: blocker
@@ -136,8 +136,8 @@ def test_include_preview_flag(world):
     assert _build(world, "--include-preview") == 0
     out = _out(world)
     assert (out / "preview_only/preview_mission_bridge.gd").is_file()
-    assert 'name="PreviewOnly"' in (out / "mission.tscn").read_text()
-    manifest = json.loads((out / "mission_manifest.json").read_text())
+    assert 'name="PreviewOnly"' in (out / "mission.tscn").read_text(encoding="utf-8")
+    manifest = json.loads((out / "mission_manifest.json").read_text(encoding="utf-8"))
     assert manifest["mode"] == "shell-handoff" and manifest["include_preview"] is True
 
 
@@ -156,17 +156,17 @@ def test_forbidden_phrase_audit(world):
     assert _build(world) == 0
     out = _out(world)
     for name in ("validation/report.md", "validation/report.html", "HANDOFF.md"):
-        text = (out / name).read_text().lower()
+        text = (out / name).read_text(encoding="utf-8").lower()
         for phrase in FORBIDDEN_PHRASES:
             assert not re.search(rf"\b{re.escape(phrase)}\b", text), (name, phrase)
-    assert "remains authoritative for mission progression" in (out / "validation/report.md").read_text()
+    assert "remains authoritative for mission progression" in (out / "validation/report.md").read_text(encoding="utf-8")
 
 
 # --- D7 --------------------------------------------------------------------------------
 
 def test_navigation_hints_edges(world):
     assert _build(world) == 0
-    d = json.loads((_out(world) / "navigation_hints.json").read_text())
+    d = json.loads((_out(world) / "navigation_hints.json").read_text(encoding="utf-8"))
     assert d["schema"] == "dispatch.navigation_hints.v0.2"
     assert d["navmesh"] == "bake_required"
     bridged = [e for e in d["edges"] if e["bridged"]]
@@ -178,7 +178,7 @@ def test_navigation_hints_edges(world):
 
 def test_handoff_verbatim_language(world):
     assert _build(world) == 0
-    text = (_out(world) / "HANDOFF.md").read_text()
+    text = (_out(world) / "HANDOFF.md").read_text(encoding="utf-8")
     assert "Level Factory and its authoring tools are not required to consume this package." in text
     assert ("The production game runtime remains authoritative for mission progression, "
             "gameplay behavior, enemy AI, replication, persistence, late joining, "

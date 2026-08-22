@@ -9,14 +9,14 @@ def test_reports_written(ctx, tmp_path):
     issues = run_all(ctx)
     score = compute(issues)
     vdir = write_reports(ctx, issues, score, tmp_path)
-    md = (vdir / "report.md").read_text()
+    md = (vdir / "report.md").read_text(encoding="utf-8")
     assert "## BLUF" in md
     assert "Shell Readiness" in md
     assert "Integration Readiness" in md
-    data = json.loads((vdir / "report.json").read_text())
+    data = json.loads((vdir / "report.json").read_text(encoding="utf-8"))
     assert data["mission_id"] == "gas_station_robbery_001"
     assert data["integration_ready"] is True
-    html = (vdir / "report.html").read_text()
+    html = (vdir / "report.html").read_text(encoding="utf-8")
     assert "Gas Station Robbery" in html
 
 
