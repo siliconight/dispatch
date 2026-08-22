@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.2 — 2026-08-22
+
+No code change. The utf-8 test hardening (every bare read_text/write_text in
+tests/ told the encoding; the Windows cp1252 decode of the adapter template's
+em dash) landed AFTER 0.4.1's stamp, and `verify-manifest`'s staleness check
+refused to certify a VERSION older than the code it names — correctly. The
+version is re-earned so the ledger reads what is true: 0.4.2 is the fossil
+retirement plus the suite that proves it on both platforms, 82 passed.
+
 ## v0.4.1 — 2026-08-22
 
 The full suite collects again. `authority.py` and
