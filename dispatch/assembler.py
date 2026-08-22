@@ -228,6 +228,9 @@ def assemble_scene(ctx: BuildContext) -> Scene:
     scene.add(SceneNode(name="ProposedBeatGraph", type="Node", parent="Handoff",
                         metadata={"dispatch_generated": True,
                                   "file": f"{res}/proposed_beat_graph.json"}))
+    scene.add(SceneNode(name="Interactives", type="Node", parent="Handoff",
+                        metadata={"dispatch_generated": True,
+                                  "file": f"{res}/interactives.json"}))
     scene.add(SceneNode(name="ValidationMetadata", type="Node", parent="Handoff",
                         metadata={"dispatch_generated": True,
                                   "dispatch_version": __version__,
@@ -340,6 +343,22 @@ def export_package(ctx: BuildContext, scene: Scene, out_dir: Path) -> dict:
     (out_dir / "mission.tscn").write_text(serialize(scene), encoding="utf-8")
     (out_dir / "gameplay_anchors.json").write_text(
         json.dumps(ctx.registry, indent=2) + "\n", encoding="utf-8")
+    # The replicable state machines, shipped beside the anchors — the gameplay
+    # side of the packaging split. Dispatch ships the declaration verbatim
+    # (ids are the network handle; INTERACTIVES.md owns the schema) and
+    # implements none of it: one replicated node per id is the game's job.
+    interactives = []
+    for tool in ("lot", "deli_counter"):
+        if tool in ctx.imports:
+            interactives = list(
+                ctx.imports[tool].meta.get("interactives", []) or [])
+            if interactives:
+                break
+    (out_dir / "interactives.json").write_text(
+        json.dumps({"schema": "dispatch.interactives.v0.1",
+                    "mission_id": spec.mission_id,
+                    "interactives": interactives}, indent=2) + "\n",
+        encoding="utf-8")
     (out_dir / "proposed_beat_graph.json").write_text(
         json.dumps(ctx.beats.to_json(), indent=2) + "\n", encoding="utf-8")
     (out_dir / "runtime_ownership_requirements.json").write_text(
@@ -385,9 +404,11 @@ def export_package(ctx: BuildContext, scene: Scene, out_dir: Path) -> dict:
         "inputs": {t: rt.schema for t, rt in sorted(ctx.resolved.tools.items())},
         "anchor_counts": _anchor_counts(ctx),
         "beat_count": len(ctx.beats.beats),
+        "interactive_count": len(interactives),
         "files": sorted(copied) + sorted(files) + [
             "mission.tscn", "mission_manifest.json", "gameplay_anchors.json",
-            "proposed_beat_graph.json", "runtime_ownership_requirements.json",
+            "interactives.json", "proposed_beat_graph.json",
+            "runtime_ownership_requirements.json",
             "navigation_hints.json", "build.lock.json", "resource_manifest.json",
             "HANDOFF.md", "LICENSES.md",
         ],

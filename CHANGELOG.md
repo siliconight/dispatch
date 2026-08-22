@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.4.0 — 2026-08-22
+
+Roadmap item 46, step 2: the handoff package ships the replicable state
+machines beside the anchors. Dispatch prepares; it still implements no
+authority, replication or persistence — one replicated node per `id` is the
+game's job.
+
+- **`interactives.json`** written beside `gameplay_anchors.json` (schema
+  `dispatch.interactives.v0.1`): the `interactives` array VERBATIM from the
+  Lot site input (Deli Counter's shell input is the fallback for
+  single-building missions). Ids are the network handle; nothing rewrites
+  them, and a state machine is deliberately NOT normalized into an anchor.
+- **`Handoff/Interactives`** scene node references the file, parallel to
+  OwnershipRequirements and ProposedBeatGraph.
+- **Manifest** gains `interactive_count` and lists `interactives.json`. The
+  file ships even when empty: empty means "this level has none", absent
+  would mean "nobody asked".
+- Importers (`lot`, `deli_counter`) carry `interactives` through `meta`.
+- `tests/test_interactives_ship.py` covers the lot path, the deli fallback,
+  and the empty declaration.
+
 ## v0.3.1 — 2026-08-14
 
 Documentation only. No behaviour change, no contract change; the contract

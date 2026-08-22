@@ -14,6 +14,13 @@ def load(rt) -> ToolImport:
     gp = read_json_file(rt.files["lot.gameplay.json"], "lot")
     imp.anchors = normalize_anchors(gp.get("anchors", []), "lot", str(gp.get("up_axis", up)))
     imp.props = list(gp.get("props", []))
+    # Interactive fixtures: replicable state machines declared upstream
+    # (Deli Counter emits them per building; Lot concatenates them into the
+    # site — see the factory's INTERACTIVES.md). Carried VERBATIM: their ids
+    # are the network handle, their transforms are already site-space, and
+    # Dispatch's job is to ship the declaration, not to normalize it into
+    # anchors — a state machine is the netcode's input, not a Marker3D.
+    imp.meta["interactives"] = list(gp.get("interactives", []) or [])
     nav = read_json_file(rt.files["lot.nav_hints.json"], "lot")
     imp.nav = load_nav_hints(nav, "lot", str(nav.get("up_axis", up)))
     imp.meta["schema"] = rt.schema

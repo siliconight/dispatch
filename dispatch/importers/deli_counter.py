@@ -13,6 +13,10 @@ def load(rt) -> ToolImport:
     up = str(gp.get("up_axis", "z"))
     imp.anchors = normalize_anchors(gp.get("anchors", []), "deli_counter", up)
     imp.props = list(gp.get("props", []))
+    # Single-building missions with no Lot input still ship their state
+    # machines; when Lot is present its site-level concatenation wins
+    # (see assembler.export_package). Carried verbatim, same as lot.py.
+    imp.meta["interactives"] = list(gp.get("interactives", []) or [])
     nav = read_json_file(rt.files["shell.nav_hints.json"], "deli_counter")
     imp.nav = load_nav_hints(nav, "deli_counter", str(nav.get("up_axis", up)))
     if "shell.collision.json" in rt.files:
