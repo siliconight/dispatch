@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.1 — 2026-08-22
+
+The full suite collects again. `authority.py` and
+`validators/online_runtime.py` were v0.1 fossils: nothing imported them
+(online_runtime was never registered as a validator), they read
+`anchor.net_id` which no anchor carries, and they imported
+CLIENT/SERVER_ANCHOR_TYPES which anchors.py stopped defining at the v0.2
+refactor — while `test_contract_v03` asserts package-wide that `net_id` and
+`network_authority` do not exist. The one test importing them broke
+collection of the ENTIRE suite, so `python -m pytest tests` has been
+un-runnable since v0.2 and nobody noticed: dispatch was "unchanged" in every
+cert cycle since, so the suite never ran. Found by the 1.34.0 re-cert, the
+first cycle in which dispatch moved.
+
+- Retired: `dispatch/authority.py`, `dispatch/validators/online_runtime.py`,
+  `tests/test_authority.py`. Nothing else changes; the living authority
+  model (`required_authority`, `ownership.py`) was never in these files.
+- After retirement: 82 passed, 0 failed.
+
 ## v0.4.0 — 2026-08-22
 
 Roadmap item 46, step 2: the handoff package ships the replicable state
