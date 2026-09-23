@@ -23,6 +23,17 @@ def load(rt) -> ToolImport:
     imp.meta["interactives"] = list(gp.get("interactives", []) or [])
     nav = read_json_file(rt.files["lot.nav_hints.json"], "lot")
     imp.nav = load_nav_hints(nav, "lot", str(nav.get("up_axis", up)))
+    # OFF-MESH LINKS. Deli Counter computes one per ladder and files it on the
+    # ladder; Lot concatenates its buildings' ladders into the site with every
+    # position moved into site space. THIS is the importer a site mission
+    # runs -- the Deli Counter one only loads for a single-building mission --
+    # and cold run 9075 shipped a package with 23 gb_ladder surfaces and an
+    # empty `links[]` because only that one had been taught to carry them.
+    _up = str(nav.get("up_axis", up))
+    for _lad in gp.get("ladders", []) or []:
+        _link = _lad.get("nav_link")
+        if _link:
+            imp.nav.add_off_mesh_link(_link, "lot", _up)
     imp.meta["schema"] = rt.schema
     imp.meta["layout"] = layout
     imp.meta["glb"] = rt.files["lot.glb"]

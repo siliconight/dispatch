@@ -78,3 +78,65 @@ def test_a_graph_with_no_ladder_ships_an_empty_list_not_a_missing_key():
     absent list and an empty one are different claims."""
     out = NavGraph().to_json()
     assert out["links"] == []
+
+
+# ---------------------------------------------------------------------------
+# the seam, which is what cold run 9075 caught and the unit tests above did not
+# ---------------------------------------------------------------------------
+LADDER_ON_SITE = {
+    "id": "mh01_ladder_0", "building": "b0",
+    "role": "roof_access", "ladder_type": "fixed_vertical",
+    "lower_anchor": [91.4, 70.0, 0.0], "upper_anchor": [91.4, 70.0, 6.5],
+    # the id comes from the LINK, not from the ladder -- the first draft of
+    # this test overrode the positions and not the id, and failed asserting an
+    # id nothing had ever produced
+    "nav_link": dict(LINK, id="mh01_ladder_0_navlink",
+                     start_position=[91.4, 70.0, 0.0],
+                     end_position=[91.4, 70.0, 6.5]),
+}
+
+
+def test_a_site_ladder_reaches_navigation_hints(world, tmp_path):
+    """COLD RUN 9075. Dispatch 0.5.0 taught the DELI COUNTER importer to carry
+    these. A site mission runs the LOT importer, whose manifest is
+    `lot.gameplay.json`, so the package shipped 23 gb_ladder surfaces and
+    `links: []`. Both sides' unit tests passed; nothing tested the seam.
+
+    FAILS BEFORE THE LOT IMPORTER CARRIES LADDERS."""
+    import json as _json
+    from conftest import edit_json
+    from dispatch.assembler import assemble_scene, build_context, export_package
+    from dispatch.spec import load_spec
+
+    edit_json(world / "build/lot/lot.gameplay.json",
+              lambda d: d.update(ladders=[LADDER_ON_SITE]))
+    spec = load_spec(world / "dispatch.mission.json")
+    ctx = build_context(spec)
+    scene = assemble_scene(ctx)
+    out = tmp_path / "pkg"
+    export_package(ctx, scene, out)
+    nav = _json.loads((out / "navigation_hints.json").read_text(encoding="utf-8"))
+    assert nav["schema"] == "dispatch.navigation_hints.v0.3"
+    ids = [l["id"] for l in nav["links"]]
+    assert "lot:mh01_ladder_0_navlink" in ids, ids
+    link = [l for l in nav["links"] if l["id"].endswith("mh01_ladder_0_navlink")][0]
+    # the cost and capability are the point -- a bare pair of endpoints is
+    # something a consumer could have derived from the marker themselves
+    assert link["required_capability"] == "climb"
+    assert link["cost"] == 3.0
+
+
+def test_a_site_with_no_ladders_still_ships_the_key(world, tmp_path):
+    """An absent list and an empty one are different claims, and a package with
+    no ladders is exactly the case that made the first measurement of this
+    prove nothing."""
+    import json as _json
+    from dispatch.assembler import assemble_scene, build_context, export_package
+    from dispatch.spec import load_spec
+
+    spec = load_spec(world / "dispatch.mission.json")
+    ctx = build_context(spec)
+    out = tmp_path / "pkg"
+    export_package(ctx, assemble_scene(ctx), out)
+    nav = _json.loads((out / "navigation_hints.json").read_text(encoding="utf-8"))
+    assert nav["links"] == []

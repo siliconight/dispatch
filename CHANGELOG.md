@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.5.1 — 2026-09-23
+
+The LOT importer carries a ladder's off-mesh link too, which is the one that
+matters.
+
+COLD RUN 9075 FALSIFIED 0.5.0. That release taught the DELI COUNTER importer to
+carry these links and was tested against a fixture and a unit test — never
+against a package containing a ladder. 9075 shipped one:
+
+    23 gb_ladder surfaces, market_hall_a01 carrying a ladder with a nav_link
+    navigation_hints.json:  schema v0.3   nodes 57   edges 55   LINKS 0
+
+The brief's own falsifier, written before the run, said exactly that: "a
+package whose buildings carry ladders and whose links[] is empty".
+
+A SITE mission runs the Lot importer — `lot.gameplay.json` is its manifest —
+and the Deli Counter importer only loads for a single-building mission. Lot
+0.76.0 now concatenates its buildings' ladders into the site with every
+position in site space; this reads them.
+
+### Tested at the seam
+
+`test_a_site_ladder_reaches_navigation_hints` puts a ladder on
+`lot.gameplay.json`, exports a real package through `export_package`, and reads
+`navigation_hints.json` back — the whole chain, not either end of it. Both
+sides' unit tests passed while the chain was broken, which is the only lesson
+here worth keeping.
+
+Its first draft asserted an id nothing had ever produced: the fixture built its
+nav_link with `dict(LINK, ...)`, overriding the positions and not the id, so
+the link shipped correctly under the id it was given and the test called it a
+failure. The fixture was wrong, not the code.
+
+87 -> 89 tests.
+
 ## v0.5.0 — 2026-09-23
 
 A ladder's off-mesh nav link reaches the package.
