@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.5.0 — 2026-09-23
+
+A ladder's off-mesh nav link reaches the package.
+
+THE WALKER, asking whether these levels have navmesh off-mesh links. They do,
+and they were being thrown away one step before they were useful.
+
+`deli_counter.ladder._nav_link` emits one per ladder and its docstring names
+the distinction exactly -- "an explicit off-mesh nav-link (NOT a baked walkable
+slope)". It carries more than two endpoints: a per-type traversal cost so a
+planner prefers a stair to a caged ladder, `agent_types`, a
+`required_capability` of "climb", an `access_state` that follows a locked gate
+or hatch, and a `reservation_state` a multiplayer server needs so two bodies do
+not climb into each other. `audit_specs` already refuses a zero-length one.
+
+MEASURED on `walk_export_club_block_009`, which HAS ladders -- the first
+attempt used a package with none and proved nothing, which is why the package
+is named here:
+
+    nav_link in the shell's gameplay.json      yes
+    nav_link anywhere in the shipped package   0 files
+    LADDER_ markers in the building scene      yes
+    ladder entries in interactives.json (35)   0
+
+So the climb MARKER shipped and the LINK did not. A player could climb; a
+consumer baking a navmesh from the package -- which `navmesh: bake_required`
+tells them to do -- had no edge to path along, and their AI would route around
+the ladder or call the roof unreachable.
+
+`importers/deli_counter` now reads the links off the gameplay manifest, where
+Deli Counter files them on the ladder because that is where their cost and
+access state live. `NavGraph.add_off_mesh_link` converts and namespaces them,
+`merge` carries them, and `to_json` ships them as `links`.
+
+THE FRAME, stated because this is exactly where it would go wrong. A link's
+positions arrive in Deli Counter's Z-up frame -- the same frame as the nav hint
+NODES, measured [8.0, -12.0, 0.0] to [8.0, -12.0, 6.6], climbing in Z. They get
+the same `blender_to_godot` conversion and the same `source:` namespacing the
+nodes already get: one transform used twice, not two spellings of it. A test
+asserts the converted link climbs in Y and moves on no other axis, because an
+unconverted one would run horizontally and path a body sideways through a wall.
+
+Schema v0.2 -> v0.3: the payload gained a list, and a reader that believed it
+had seen every key of v0.2 would be wrong about this package. `docs/FORMATS.md`
+and the contract test move with it. A graph with no ladder ships `links: []`
+rather than omitting the key -- an absent list and an empty one are different
+claims. 87 passed.
+
 ## v0.4.2 — 2026-08-22
 
 No code change. The utf-8 test hardening (every bare read_text/write_text in
