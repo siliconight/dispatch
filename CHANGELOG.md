@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.5.2 — 2026-09-23
+
+**The version Dispatch stamps on its artefacts is the version it is.**
+`dispatch/__init__.py` read `__version__ = "0.3.0"` while `VERSION` read 0.5.1;
+0.4.0, 0.5.0 and 0.5.1 each bumped the file and left the literal alone.
+
+Not cosmetic. `__version__` is written into `navigation_hints.json`, the build
+lock and the closure report as `dispatch_version`, and Level Factory's `doctor`
+prints it — so a package assembled by 0.5.1 reported itself as built by 0.3.0.
+Anybody reading a cold run's own output to confirm which code produced it was
+told the wrong thing, which is exactly how cold run 9075 caught 0.5.0 shipping
+a false claim about ladder links.
+
+Found by `doctor` printing `tool:dispatch v0.3.0 @ 27ae9183` — a commit that is
+0.5.1 — while setting up cold run 9076, and fixed before `--begin` so it counts
+as setup rather than an intervention.
+
+`tests/test_version.py` pins the two together and caught the bump to 0.5.2
+leaving the literal at 0.5.1 within a minute of being written.
+
 ## v0.5.1 — 2026-09-23
 
 The LOT importer carries a ladder's off-mesh link too, which is the one that
