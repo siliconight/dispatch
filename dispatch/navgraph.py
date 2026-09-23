@@ -28,6 +28,18 @@ class NavGraph:
     nodes: dict = field(default_factory=dict)   # id -> NavNode
     adj: dict = field(default_factory=dict)     # id -> set(id)
     bridges: list = field(default_factory=list)  # auto-added cross-source links
+    #: OFF-MESH links -- a ladder, and later a drop or a vault. NOT edges: an
+    #: edge says two nav-hint nodes are connected by walkable floor, and a
+    #: baked navmesh already knows that. This says a body can get from one
+    #: point to another by a means the mesh cannot express, which is the whole
+    #: reason the engines in this space have a separate concept for it.
+    #:
+    #: Deli Counter computes them (`ladder._nav_link`) with a per-type cost so
+    #: a planner prefers a stair to a caged ladder, a `required_capability`, an
+    #: access state, and a reservation state a multiplayer server needs. None
+    #: of that is re-derivable from a marker position, which is why it is
+    #: carried rather than left for the consumer.
+    links: list = field(default_factory=list)
 
     def add_node(self, node: NavNode) -> None:
         self.nodes[node.id] = node
@@ -37,6 +49,28 @@ class NavGraph:
         if a in self.nodes and b in self.nodes and a != b:
             self.adj[a].add(b)
             self.adj[b].add(a)
+
+    def add_off_mesh_link(self, rec: dict, source: str, up_axis: str = "z") -> None:
+        """Record one off-mesh link, in the nodes' frame and id space.
+
+        The positions arrive in the producing tool's frame and are converted
+        exactly as `load_nav_hints` converts a node's -- one transform, used
+        twice, rather than two spellings of it. The id is namespaced with the
+        source for the same reason node ids are: two tools may both ship a
+        `ladder_0`.
+        """
+        def _pos(raw):
+            return list(blender_to_godot(raw) if up_axis == "z"
+                        else tuple(float(v) for v in raw))
+
+        out = dict(rec)
+        out["id"] = f"{source}:{rec.get('id', 'link')}"
+        out["source"] = source
+        if "start_position" in rec:
+            out["start_position"] = _pos(rec["start_position"])
+        if "end_position" in rec:
+            out["end_position"] = _pos(rec["end_position"])
+        self.links.append(out)
 
     # -- queries ------------------------------------------------------------
 
@@ -105,13 +139,16 @@ class NavGraph:
                 e["bridge_radius"] = bridge_radius
             edges.append(e)
         return {
-            "schema": "dispatch.navigation_hints.v0.2",
+            # v0.3 adds `links`. A reader that believed it had seen every key
+            # of v0.2 would be wrong about this package, so the version moves.
+            "schema": "dispatch.navigation_hints.v0.3",
             "navmesh": "bake_required",
             "nodes": [
                 {"id": n.id, "pos": list(n.pos), "source": n.source}
                 for n in sorted(self.nodes.values(), key=lambda n: n.id)
             ],
             "edges": edges,
+            "links": sorted(self.links, key=lambda l: str(l.get("id", ""))),
         }
 
 
@@ -148,6 +185,9 @@ def merge(graphs: list, bridge_radius: float) -> NavGraph:
         for a in g.adj:
             for b in g.adj[a]:
                 merged.add_link(a, b)
+        # Off-mesh links survive the merge. They were namespaced by source on
+        # the way in, so there is nothing to reconcile.
+        merged.links.extend(g.links)
     nodes = sorted(merged.nodes.values(), key=lambda n: n.id)
     for i, a in enumerate(nodes):
         for b in nodes[i + 1:]:

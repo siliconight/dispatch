@@ -167,7 +167,7 @@ def test_forbidden_phrase_audit(world):
 def test_navigation_hints_edges(world):
     assert _build(world) == 0
     d = json.loads((_out(world) / "navigation_hints.json").read_text(encoding="utf-8"))
-    assert d["schema"] == "dispatch.navigation_hints.v0.2"
+    assert d["schema"] == "dispatch.navigation_hints.v0.3"
     assert d["navmesh"] == "bake_required"
     bridged = [e for e in d["edges"] if e["bridged"]]
     assert bridged and all(e["bridge_radius"] == 1.5 for e in bridged)

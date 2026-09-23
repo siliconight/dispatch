@@ -144,9 +144,13 @@ runtime_ownership_requirements.json   schema dispatch.runtime_ownership_requirem
                                       late-join state, persistence); integration_status always
                                       "unimplemented" here. No networking library, RPC names,
                                       serialization, or network entity IDs are prescribed.
-navigation_hints.json                 schema dispatch.navigation_hints.v0.2 — merged node/edge
+navigation_hints.json                 schema dispatch.navigation_hints.v0.3 — merged node/edge
                                       graph; auto-bridge edges flagged bridged:true with the
-                                      bridge_radius that produced them; navmesh: bake_required
+                                      bridge_radius that produced them; navmesh: bake_required;
+                                      links[] carries OFF-MESH links (a ladder, later a drop or
+                                      vault) that a baked mesh cannot express, each with its
+                                      start/end in Godot space, a traversal cost, agent_types,
+                                      required_capability, access_state and reservation_state
 resource_manifest.json                schema dispatch.resource_manifest.v0.2 — every package
                                       file with sha256; requires_editor_plugins/autoloads: false
 LICENSES.md                           aggregated upstream license records
