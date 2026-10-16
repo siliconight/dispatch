@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.3 — 2026-10-16
+
+**A declared drop's off-mesh link reaches the package.** Deli Counter 0.226.0 files a one-way `nav_link` on
+every `floor_hole` / `hatch` vertical link (factory roadmap 173: "a drop is either guarded or declared"), and
+Lot 0.125.0 moves it into site space. Both importers here carried a ladder's link and read nothing off a
+vertical link, so `navigation_hints.json` `links[]` held the climbs and none of the drops -- cold run 9317's
+package: 2 links, both ladders, while its deli declares a floor hole and a hatch. Now both importers read
+`vertical_links[].nav_link` as they read `ladders[].nav_link`; `NavGraph.add_off_mesh_link` namespaces and
+converts it and the payload rides verbatim (`required_capability` "drop", `bidirectional` false, `hole`: the
+cut's rect, for a gate that asks which rim is declared). `tests/test_drop_links.py` runs both importers on a
+minimal package.
+
 ## v0.5.2 — 2026-09-23
 
 **The version Dispatch stamps on its artefacts is the version it is.**

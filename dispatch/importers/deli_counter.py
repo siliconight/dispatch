@@ -29,6 +29,14 @@ def load(rt) -> ToolImport:
         _link = _lad.get("nav_link")
         if _link:
             imp.nav.add_off_mesh_link(_link, "deli_counter", _up)
+    # DECLARED DROPS (Deli Counter 0.226.0): a floor_hole / hatch vertical link
+    # files a one-way nav link the same way a ladder does, so the AI's
+    # off-mesh set and a drop-edge gate's declared set are one list (factory
+    # roadmap 173). Read off the same record, converted by the same call.
+    for _vl in gp.get("vertical_links", []) or []:
+        _link = _vl.get("nav_link")
+        if _link:
+            imp.nav.add_off_mesh_link(_link, "deli_counter", _up)
     if "shell.collision.json" in rt.files:
         imp.meta["collision"] = read_json_file(rt.files["shell.collision.json"], "deli_counter")
     imp.meta["schema"] = rt.schema

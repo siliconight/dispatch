@@ -34,6 +34,13 @@ def load(rt) -> ToolImport:
         _link = _lad.get("nav_link")
         if _link:
             imp.nav.add_off_mesh_link(_link, "lot", _up)
+    # DECLARED DROPS (Deli Counter 0.226.0, moved into site space by Lot
+    # 0.125.0): read off the vertical links as the ladders' are, in THIS
+    # importer too -- the one a site mission runs (0.5.1's lesson).
+    for _vl in gp.get("vertical_links", []) or []:
+        _link = _vl.get("nav_link")
+        if _link:
+            imp.nav.add_off_mesh_link(_link, "lot", _up)
     imp.meta["schema"] = rt.schema
     imp.meta["layout"] = layout
     imp.meta["glb"] = rt.files["lot.glb"]
