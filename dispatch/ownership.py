@@ -8,7 +8,7 @@ anchors in the Functional layer, cleanly separated from Presentation.
 from __future__ import annotations
 
 from . import __version__
-from .anchors import (DEBUG_ANCHOR_TYPES, RUNTIME_OWNED_TYPES,
+from .anchors import (DEBUG_ANCHOR_TYPES, RUNTIME_OWNED_TYPES, event_block,
                       required_authority_for, runtime_requirements_for)
 
 FUNCTIONAL_ROOTS = (
@@ -129,6 +129,10 @@ def build_anchor_registry(spec, anchors: list) -> dict:
             "runtime_binding": None,
             "runtime_requirements": runtime_requirements_for(a),
         })
+        # a gameplay event, where the anchor carries one (0.6.0; `anchors.event_block`)
+        ev = event_block(a)
+        if ev is not None:
+            items[-1]["event"] = ev
     return {
         "schema": "dispatch.gameplay_anchors.v0.2",
         "dispatch_version": __version__,

@@ -100,6 +100,44 @@ class Anchor:
         return EXPECTED_ADAPTER.get(self.type, "")
 
 
+#: GAMEPLAY EVENTS (0.6.0, the factory's roadmap 323). An anchor may carry an EVENT: data a game may ingest or
+#: ignore, never behaviour Dispatch runs. The factory's walker: "they could mean nothing, but they could also be
+#: ingested/used by the gameplay layer", and of zones a player stands in, "we don't do that, we just have the event
+#: that we send (without spamming/rate limiting)". So a block names the event and HOW it fires, and nothing about what
+#: follows -- no heat, timer or mission end:
+#:   event   a dotted name, `alarm.*`, `score.*` or `zone.*`
+#:   fires   `on_touch` (a fixture is used), `on_enter` / `on_exit` (a zone)
+#:   repeat  `edge` -- once when the condition becomes true, not again until it has been false (standing in a zone
+#:           sends one event, not one a frame) -- or `once`, once per mission
+#:   audible a fact about the real alarm, where there is one
+EVENT_PREFIXES = ("alarm.", "score.", "zone.")
+EVENT_FIRES = ("on_touch", "on_enter", "on_exit")
+EVENT_REPEAT = ("edge", "once")
+
+
+def event_block(anchor) -> dict | None:
+    """The anchor's event, normalised -- ``fires`` defaulting to `on_touch` and ``repeat`` to `edge` -- or None when
+    it carries none. A block that names an event outside the vocabulary, or a firing rule Dispatch does not know,
+    raises ValueError: a consumer could not read it the way it was meant."""
+    raw = anchor.extra.get("event") if hasattr(anchor, "extra") else None
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = {"event": raw}
+    name = str(raw.get("event", ""))
+    if not name.startswith(EVENT_PREFIXES):
+        raise ValueError("anchor %s: event %r is not alarm.*, score.* or zone.*" % (anchor.id, name))
+    out = {"event": name, "fires": str(raw.get("fires", "on_touch")), "repeat": str(raw.get("repeat", "edge"))}
+    if out["fires"] not in EVENT_FIRES or out["repeat"] not in EVENT_REPEAT:
+        raise ValueError("anchor %s: event %r fires %r repeat %r" % (anchor.id, name, out["fires"], out["repeat"]))
+    if "audible" in raw:
+        out["audible"] = bool(raw["audible"])
+    for k in ("fixture", "room"):
+        if raw.get(k):
+            out[k] = str(raw[k])
+    return out
+
+
 def required_authority_for(anchor: Anchor) -> str:
     """Declared authority REQUIREMENT (not a description of anything built)."""
     if anchor.type in RUNTIME_OWNED_TYPES:

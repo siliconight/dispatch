@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.0 — 2026-10-28
+
+**An anchor may carry a gameplay event.** The factory's walker, of a score location: "gameplay events or something
+that doesn't mean much for level factory but is part of what would trigger police coming or stuff like that for the
+dispatch layer", "they could mean nothing, but they could also be ingested/used by the gameplay layer", and of the
+zones a player stands in, "we just have the event that we send (without spamming/rate limiting)". So an event is
+DATA, never behaviour Dispatch runs: `anchors.event_block` reads an anchor's `event` -- a dotted name (`alarm.*`,
+`score.*`, `zone.*`), `fires` (`on_touch`, `on_enter`, `on_exit`; default `on_touch`), `repeat` (`edge`: once when it
+becomes true, not again until it has been false; or `once`; default `edge`), and the real alarm's `audible` where
+there is one -- and `build_anchor_registry` and the anchor's node metadata carry it. An anchor without one is
+unchanged, so every package without events is byte for byte what it was. A block naming an event outside the
+vocabulary, or a firing rule not in it, raises: a consumer could not read it as it was meant. No heat, timer or
+mission end anywhere: those are the game's. `tests/test_events.py` (new; fails on 0.5.4).
+
 ## v0.5.4 — 2026-10-28
 
 **The MIT licence travels.** The walker's call, 2026-10-26: every factory repo carries MIT. This repo's `LICENSE` was committed that day, after the tag factory 1.41.0 named; factory 1.42.0 packaged that tag and so shipped without it. This release carries it, and changes nothing else.

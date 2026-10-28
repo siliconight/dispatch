@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import GENERATED_MARKER, __version__
-from .anchors import find_duplicate_ids
+from .anchors import event_block, find_duplicate_ids
 from .flow import compile_beats
 from .importers import IMPORTERS
 from .navgraph import NavGraph, merge
@@ -186,6 +186,9 @@ def assemble_scene(ctx: BuildContext) -> Scene:
             md["tags"] = list(a.tags)
         if a.objective:
             md["objective"] = a.objective
+        ev = event_block(a)
+        if ev is not None:
+            md["event"] = ev
         scene.add(SceneNode(name=name, type="Marker3D", parent=parent,
                             pos=a.pos, rot_y=a.rot_y, metadata=md))
 
