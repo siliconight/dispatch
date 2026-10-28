@@ -118,7 +118,8 @@ EVENT_REPEAT = ("edge", "once")
 def event_block(anchor) -> dict | None:
     """The anchor's event, normalised -- ``fires`` defaulting to `on_touch` and ``repeat`` to `edge` -- or None when
     it carries none. A block that names an event outside the vocabulary, or a firing rule Dispatch does not know,
-    raises ValueError: a consumer could not read it the way it was meant."""
+    raises ValueError: a consumer could not read it the way it was meant. A `zone.*` event carries its
+    ``radius`` (metres in plan, positive): the extent a body enters."""
     raw = anchor.extra.get("event") if hasattr(anchor, "extra") else None
     if raw is None:
         return None
@@ -135,6 +136,17 @@ def event_block(anchor) -> dict | None:
     for k in ("fixture", "room"):
         if raw.get(k):
             out[k] = str(raw[k])
+    # A zone is a place a body enters, so it has an extent: `radius`, metres in plan around the anchor's position
+    # (0.7.0). Without one `on_enter` has nothing to be entered, and a consumer would have to invent a size.
+    if "radius" in raw or name.startswith("zone."):
+        try:
+            r = float(raw.get("radius"))
+        except (TypeError, ValueError):
+            r = float("nan")
+        if not (r > 0.0 and r < float("inf")):
+            raise ValueError("anchor %s: event %r needs a positive radius in metres, got %r"
+                             % (anchor.id, name, raw.get("radius")))
+        out["radius"] = r
     return out
 
 

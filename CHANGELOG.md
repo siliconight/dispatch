@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.0 — 2026-10-28
+
+**A zone has an extent.** 0.6.0 let an event say `fires: on_enter` and gave it nothing to be entered: a game reading
+`zone.extraction` would have had to invent the size of the getaway's end zone. `anchors.event_block` now carries
+`radius` -- metres in plan around the anchor's position -- and REQUIRES it, positive and finite, on every `zone.*`
+event; a point event (`alarm.*`, `score.*`) needs none and may carry one. The registry and the node metadata carry it
+with the rest of the block. Still data: how long a crew must stand in it, and what that ends, are the game's.
+`tests/test_events.py`: a zone without a real extent is refused (fails on 0.6.0).
+
 ## v0.6.0 — 2026-10-28
 
 **An anchor may carry a gameplay event.** The factory's walker, of a score location: "gameplay events or something

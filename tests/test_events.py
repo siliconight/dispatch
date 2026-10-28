@@ -27,9 +27,31 @@ def test_an_alarm_carries_its_event_with_the_firing_rule_defaulted():
 
 def test_a_zone_says_it_fires_once_on_entry():
     a, = _anchors({"id": "lot:van", "type": "trigger", "pos": [0, 0, 0],
-                   "event": {"event": "zone.extraction", "fires": "on_enter", "repeat": "edge"}})
+                   "event": {"event": "zone.extraction", "fires": "on_enter", "repeat": "edge", "radius": 1.75}})
     ev = event_block(a)
     assert ev["fires"] == "on_enter" and ev["repeat"] == "edge" and "audible" not in ev
+    assert ev["radius"] == 1.75
+
+
+@pytest.mark.parametrize("radius", [None, 0, -1.0, "wide", float("nan"), float("inf")])
+def test_a_zone_without_a_real_extent_is_refused(radius):
+    """0.7.0: on_enter needs something to be entered. FAILS ON 0.6.0, which takes a zone with no size."""
+    ev = {"event": "zone.extraction", "fires": "on_enter"}
+    if radius is not None:
+        ev["radius"] = radius
+    a, = _anchors({"id": "lot:van", "type": "trigger", "pos": [0, 0, 0], "event": ev})
+    with pytest.raises(ValueError):
+        event_block(a)
+
+
+def test_a_point_event_needs_no_radius_and_the_registry_carries_a_zones():
+    point, zone = _anchors(
+        {"id": "dc:atm", "type": "trigger", "pos": [0, 0, 0], "event": {"event": "alarm.atm_tampered"}},
+        {"id": "lot:van", "type": "extraction", "pos": [5, 0, 0],
+         "event": {"event": "zone.extraction", "fires": "on_enter", "radius": 1.75}})
+    assert "radius" not in event_block(point)
+    reg = {r["shell_id"].split("/")[-1]: r for r in build_anchor_registry(SPEC, [point, zone])["anchors"]}
+    assert reg["lot:van"]["event"]["radius"] == 1.75
 
 
 def test_the_registry_and_the_node_carry_it_and_an_anchor_without_one_has_none():
@@ -42,7 +64,7 @@ def test_the_registry_and_the_node_carry_it_and_an_anchor_without_one_has_none()
 
 
 @pytest.mark.parametrize("block", [{"event": "police.arrive"}, {"event": "alarm.x", "fires": "every_frame"},
-                                   {"event": "zone.x", "repeat": "always"}])
+                                   {"event": "zone.x", "repeat": "always", "radius": 2.0}])
 def test_a_block_a_consumer_could_not_read_is_refused(block):
     a, = _anchors({"id": "dc:bad", "type": "trigger", "pos": [0, 0, 0], "event": block})
     with pytest.raises(ValueError):
