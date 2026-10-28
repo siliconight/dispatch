@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.0 — 2026-10-28
+
+**A zone may fire on entry and exit, and name what it acts on.** The factory's walker: "opening the safe should be a
+gameplay event where you have to stand in an area for a certain amount of time close to the 'drill' and then the
+door opens". A game times that hold itself, so it must hear both edges: `fires` may list several rules
+(`["on_enter", "on_exit"]`), normalised to the vocabulary's order; one rule stays a string, so every block written
+before reads exactly as it did. `target` names the interactive the event acts on -- a vault door's id, whose states
+(locked, unlocked, open, breached) the game already drives -- and is carried with the rest. How long a drill takes,
+whether it pauses or jams, and what it sets off are the game's. `tests/test_events.py` (fails on 0.7.0).
+
 ## v0.7.0 — 2026-10-28
 
 **A zone has an extent.** 0.6.0 let an event say `fires: on_enter` and gave it nothing to be entered: a game reading

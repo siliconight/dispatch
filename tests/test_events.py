@@ -74,3 +74,29 @@ def test_a_block_a_consumer_could_not_read_is_refused(block):
 def test_the_vocabulary_holds_no_behaviour():
     """Edge and once are how often an event is SENT; nothing here says what a game does with it."""
     assert EVENT_FIRES == ("on_touch", "on_enter", "on_exit") and EVENT_REPEAT == ("edge", "once")
+
+
+def test_a_drill_zone_fires_on_entry_and_exit_and_names_its_door():
+    """0.8.0: a drill zone is sent as a body enters and as it leaves, so a game times the hold; it names the
+    interactive it acts on. FAILS ON 0.7.0, which takes one rule and drops the target."""
+    a, = _anchors({"id": "dc:drill", "type": "trigger", "pos": [0, 0, 0],
+                   "event": {"event": "zone.drill", "fires": ["on_exit", "on_enter"], "radius": 1.0,
+                             "target": "bank_branch_a02:if:5f1e", "fixture": "vault_door"}})
+    ev = event_block(a)
+    assert ev["fires"] == ["on_enter", "on_exit"] and ev["target"] == "bank_branch_a02:if:5f1e"
+    reg = {r["shell_id"].split("/")[-1]: r for r in build_anchor_registry(SPEC, [a])["anchors"]}
+    assert reg["dc:drill"]["event"]["fires"] == ["on_enter", "on_exit"]
+
+
+@pytest.mark.parametrize("fires", [[], ["on_enter", "on_enter"], ["on_enter", "while_inside"], 3])
+def test_a_firing_list_a_consumer_could_not_read_is_refused(fires):
+    a, = _anchors({"id": "dc:bad", "type": "trigger", "pos": [0, 0, 0],
+                   "event": {"event": "zone.drill", "fires": fires, "radius": 1.0}})
+    with pytest.raises(ValueError):
+        event_block(a)
+
+
+def test_one_rule_is_still_a_string():
+    a, = _anchors({"id": "lot:van", "type": "extraction", "pos": [0, 0, 0],
+                   "event": {"event": "zone.extraction", "fires": ["on_enter"], "radius": 1.75}})
+    assert event_block(a)["fires"] == "on_enter"

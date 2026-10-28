@@ -119,7 +119,12 @@ def event_block(anchor) -> dict | None:
     """The anchor's event, normalised -- ``fires`` defaulting to `on_touch` and ``repeat`` to `edge` -- or None when
     it carries none. A block that names an event outside the vocabulary, or a firing rule Dispatch does not know,
     raises ValueError: a consumer could not read it the way it was meant. A `zone.*` event carries its
-    ``radius`` (metres in plan, positive): the extent a body enters."""
+    ``radius`` (metres in plan, positive): the extent a body enters.
+
+    0.8.0: ``fires`` may list several rules -- a drill zone is sent as a body enters AND as it leaves, so a game can
+    time the hold itself -- normalised to the vocabulary's order; one rule stays a string, so every block written
+    before is read exactly as it was. ``target`` names the interactive the event acts on (a vault door's id), passed
+    through; what acting means -- how long a drill takes, what opens -- is the game's."""
     raw = anchor.extra.get("event") if hasattr(anchor, "extra") else None
     if raw is None:
         return None
@@ -128,12 +133,17 @@ def event_block(anchor) -> dict | None:
     name = str(raw.get("event", ""))
     if not name.startswith(EVENT_PREFIXES):
         raise ValueError("anchor %s: event %r is not alarm.*, score.* or zone.*" % (anchor.id, name))
-    out = {"event": name, "fires": str(raw.get("fires", "on_touch")), "repeat": str(raw.get("repeat", "edge"))}
-    if out["fires"] not in EVENT_FIRES or out["repeat"] not in EVENT_REPEAT:
-        raise ValueError("anchor %s: event %r fires %r repeat %r" % (anchor.id, name, out["fires"], out["repeat"]))
+    fires = raw.get("fires", "on_touch")
+    rules = [fires] if isinstance(fires, str) else list(fires) if isinstance(fires, (list, tuple)) else [None]
+    out = {"event": name, "repeat": str(raw.get("repeat", "edge"))}
+    if (not rules or len(set(rules)) != len(rules) or any(r not in EVENT_FIRES for r in rules)
+            or out["repeat"] not in EVENT_REPEAT):
+        raise ValueError("anchor %s: event %r fires %r repeat %r" % (anchor.id, name, fires, out["repeat"]))
+    ordered = [r for r in EVENT_FIRES if r in rules]
+    out = {"event": name, "fires": ordered[0] if len(ordered) == 1 else ordered, "repeat": out["repeat"]}
     if "audible" in raw:
         out["audible"] = bool(raw["audible"])
-    for k in ("fixture", "room"):
+    for k in ("fixture", "room", "target"):
         if raw.get(k):
             out[k] = str(raw[k])
     # A zone is a place a body enters, so it has an extent: `radius`, metres in plan around the anchor's position
