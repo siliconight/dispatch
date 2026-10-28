@@ -11,7 +11,7 @@ Assemble the mission. Validate the mission. Package the mission for online play.
 #: claimed to be built by 0.3.0 -- and a cold run reading its own
 #: output to confirm which code ran would have been told the wrong
 #: thing. `tests/test_version.py` pins the two together.
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 
 SCHEMA_MISSION = "dispatch.mission.v0.2"
 SCHEMA_MISSION_LEGACY = "dispatch.mission.v0.1"

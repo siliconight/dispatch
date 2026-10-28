@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.4 — 2026-10-28
+
+**The MIT licence travels.** The walker's call, 2026-10-26: every factory repo carries MIT. This repo's `LICENSE` was committed that day, after the tag factory 1.41.0 named; factory 1.42.0 packaged that tag and so shipped without it. This release carries it, and changes nothing else.
+
 ## v0.5.3 — 2026-10-16
 
 **A declared drop's off-mesh link reaches the package.** Deli Counter 0.226.0 files a one-way `nav_link` on
